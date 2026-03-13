@@ -1,322 +1,394 @@
-import React, { useMemo, useState } from "react";
-
-const WIDTH = 760;
-const HEIGHT = 420;
-const PAD = 50;
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function Card({ children, style }) {
-  return (
-    <div
-      style={{
-        background: "white",
-        borderRadius: 24,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-        border: "1px solid #e5e7eb",
-        ...style,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Button({ children, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "10px 16px",
-        borderRadius: 14,
-        border: active ? "1px solid #111827" : "1px solid #d1d5db",
-        background: active ? "#111827" : "white",
-        color: active ? "white" : "#111827",
-        fontWeight: 600,
-        cursor: "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SliderRow({ label, value, min = 0, max = 100, onChange }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 14 }}>
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: "100%" }}
-      />
-    </div>
-  );
-}
-
-function toScreenX(x, xMin = 0, xMax = 10) {
-  return PAD + ((x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
-}
-
-function toScreenY(y, yMin = 0, yMax = 10) {
-  return HEIGHT - PAD - ((y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
-}
-
-function pathFromFn(fn, xMin = 0, xMax = 10, steps = 100) {
-  let d = "";
-  for (let i = 0; i <= steps; i++) {
-    const x = xMin + (i / steps) * (xMax - xMin);
-    const y = fn(x);
-    const sx = toScreenX(x, xMin, xMax);
-    const sy = toScreenY(y);
-    d += `${i === 0 ? "M" : "L"} ${sx} ${sy} `;
-  }
-  return d;
-}
-
-function approximateIntersection(f, g, xMin = 0, xMax = 10) {
-  let bestX = xMin;
-  let bestDiff = Infinity;
-  for (let i = 0; i <= 800; i++) {
-    const x = xMin + (i / 800) * (xMax - xMin);
-    const diff = Math.abs(f(x) - g(x));
-    if (diff < bestDiff) {
-      bestDiff = diff;
-      bestX = x;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Economic Policy Visualizer</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+      color: #111827;
     }
-  }
-  return { x: bestX, y: f(bestX) };
-}
-
-function Diagram({ title, xLabel, yLabel, curves, equilibrium, verticalLineX }) {
-  return (
-    <Card style={{ padding: 20 }}>
-      <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>{title}</div>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: "100%", height: "auto", background: "#fff", borderRadius: 18 }}>
-        <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="#111827" strokeWidth="2" />
-        <line x1={PAD} y1={HEIGHT - PAD} x2={PAD} y2={PAD} stroke="#111827" strokeWidth="2" />
-
-        <text x={WIDTH - PAD - 40} y={HEIGHT - PAD + 30} fontSize="14" fill="#374151">{xLabel}</text>
-        <text x={16} y={PAD - 14} fontSize="14" fill="#374151">{yLabel}</text>
-
-        {[2, 4, 6, 8].map((t) => (
-          <g key={t}>
-            <line x1={toScreenX(t)} y1={PAD} x2={toScreenX(t)} y2={HEIGHT - PAD} stroke="#f3f4f6" />
-            <line x1={PAD} y1={toScreenY(t)} x2={WIDTH - PAD} y2={toScreenY(t)} stroke="#f3f4f6" />
-          </g>
-        ))}
-
-        {verticalLineX !== undefined && (
-          <>
-            <line
-              x1={toScreenX(verticalLineX)}
-              y1={PAD}
-              x2={toScreenX(verticalLineX)}
-              y2={HEIGHT - PAD}
-              stroke="#6b7280"
-              strokeDasharray="8 7"
-              strokeWidth="2"
-            />
-            <text x={toScreenX(verticalLineX) + 8} y={74} fontSize="14" fill="#374151">LRAS</text>
-          </>
-        )}
-
-        {curves.map((curve) => (
-          <g key={curve.label}>
-            <path
-              d={curve.path}
-              fill="none"
-              stroke={curve.color}
-              strokeWidth="3"
-              strokeDasharray={curve.dashed ? "8 6" : "0"}
-            />
-            <text x={curve.labelX} y={curve.labelY} fontSize="15" fill={curve.color} fontWeight="700">
-              {curve.label}
-            </text>
-          </g>
-        ))}
-
-        {equilibrium && (
-          <>
-            <line
-              x1={toScreenX(equilibrium.x)}
-              y1={toScreenY(equilibrium.y)}
-              x2={toScreenX(equilibrium.x)}
-              y2={HEIGHT - PAD}
-              stroke="#9ca3af"
-              strokeDasharray="5 5"
-            />
-            <line
-              x1={PAD}
-              y1={toScreenY(equilibrium.y)}
-              x2={toScreenX(equilibrium.x)}
-              y2={toScreenY(equilibrium.y)}
-              stroke="#9ca3af"
-              strokeDasharray="5 5"
-            />
-            <circle cx={toScreenX(equilibrium.x)} cy={toScreenY(equilibrium.y)} r="6" fill="#111827" />
-            <text x={toScreenX(equilibrium.x) + 10} y={toScreenY(equilibrium.y) - 10} fontSize="14" fill="#111827" fontWeight="700">
-              E
-            </text>
-          </>
-        )}
-      </svg>
-    </Card>
-  );
-}
-
-function ADASView() {
-  const [government, setGovernment] = useState(50);
-  const [money, setMoney] = useState(50);
-  const [taxes, setTaxes] = useState(50);
-  const [oilShock, setOilShock] = useState(0);
-
-  const model = useMemo(() => {
-    const g = (government - 50) / 25;
-    const m = (money - 50) / 25;
-    const t = (taxes - 50) / 30;
-    const oil = oilShock / 22;
-
-    const adShift = g + m - 0.9 * t;
-    const srasShift = -oil;
-
-    const AD = (x) => clamp(8.3 - 0.62 * x + adShift, 0, 10);
-    const SRAS = (x) => clamp(2.0 + 0.58 * x + srasShift, 0, 10);
-    const LRAS = clamp(5.8 - 0.5 * oil, 2.8, 8.5);
-    const eq = approximateIntersection(AD, SRAS);
-
-    let text = "Stable macro environment";
-    if (oil > 0.7 && adShift > 0.4) text = "Stagflation risk: prices rising while supply worsens.";
-    else if (oil > 0.7) text = "Negative supply shock: SRAS shifts left, price level rises, output tends to fall.";
-    else if (adShift > 0.7) text = "Expansionary demand policy: AD shifts right, output and prices rise.";
-    else if (adShift < -0.7) text = "Contractionary demand policy: AD shifts left, output and prices fall.";
-
-    return { AD, SRAS, LRAS, eq, text };
-  }, [government, money, taxes, oilShock]);
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(320px, 0.9fr)", gap: 24 }}>
-      <Diagram
-        title="AD–AS Simulator"
-        xLabel="Real Output (Y)"
-        yLabel="Price Level (P)"
-        verticalLineX={model.LRAS}
-        equilibrium={model.eq}
-        curves={[
-          { label: "AD", color: "#2563eb", path: pathFromFn(model.AD), labelX: 580, labelY: 110 },
-          { label: "SRAS", color: "#dc2626", path: pathFromFn(model.SRAS), labelX: 560, labelY: 210 },
-        ]}
-      />
-
-      <Card style={{ padding: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Controls</div>
-        <SliderRow label="Government Spending" value={government} onChange={setGovernment} />
-        <SliderRow label="Money Supply" value={money} onChange={setMoney} />
-        <SliderRow label="Taxes" value={taxes} onChange={setTaxes} />
-        <SliderRow label="Oil / Supply Shock" value={oilShock} onChange={setOilShock} />
-
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e5e7eb" }}>
-          <div style={{ marginBottom: 8 }}><strong>Equilibrium output:</strong> {model.eq.x.toFixed(2)}</div>
-          <div style={{ marginBottom: 8 }}><strong>Equilibrium price level:</strong> {model.eq.y.toFixed(2)}</div>
-          <div><strong>Interpretation:</strong> {model.text}</div>
+    .wrap {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 22px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    .hero {
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      margin: 0 0 10px 0;
+      font-size: 40px;
+    }
+    .hero p {
+      margin: 0;
+      color: #4b5563;
+      font-size: 18px;
+      line-height: 1.6;
+      max-width: 860px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      border: 1px solid #d1d5db;
+      background: white;
+      color: #111827;
+      padding: 10px 16px;
+      border-radius: 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .tab-btn.active {
+      background: #111827;
+      color: white;
+      border-color: #111827;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.8fr) minmax(320px, 0.9fr);
+      gap: 24px;
+    }
+    .diagram-card, .controls-card {
+      padding: 22px;
+    }
+    .section-title {
+      font-size: 24px;
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+    .slider-row {
+      margin-bottom: 20px;
+    }
+    .slider-head {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .info {
+      margin-top: 18px;
+      padding: 16px;
+      border-radius: 16px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      line-height: 1.6;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+      background: white;
+      border-radius: 18px;
+      display: block;
+    }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 32px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card hero">
+      <div class="topbar">
+        <div>
+          <h1>Economic Policy Visualizer</h1>
+          <p>Interactive macroeconomic simulations for fiscal and monetary policy. Move the sliders and watch how equilibrium changes in the AD–AS and IS–LM models.</p>
         </div>
-      </Card>
-    </div>
-  );
-}
-
-function ISLMView() {
-  const [government, setGovernment] = useState(50);
-  const [money, setMoney] = useState(50);
-  const [taxes, setTaxes] = useState(50);
-
-  const model = useMemo(() => {
-    const g = (government - 50) / 25;
-    const m = (money - 50) / 25;
-    const t = (taxes - 50) / 30;
-
-    const IS = (x) => clamp(8.6 - 0.66 * x + g - 0.9 * t, 0, 10);
-    const LM = (x) => clamp(2.0 + 0.55 * x - m, 0, 10);
-    const eq = approximateIntersection(IS, LM);
-
-    let text = "Balanced policy mix.";
-    if (g > 0.6 && m > 0.6) text = "Strong expansionary fiscal and monetary mix.";
-    else if (g > 0.6) text = "Fiscal expansion shifts IS to the right.";
-    else if (m > 0.6) text = "Monetary expansion shifts LM down/right.";
-    else if (t > 0.6) text = "Higher taxes contract demand and shift IS left.";
-
-    return { IS, LM, eq, text };
-  }, [government, money, taxes]);
-
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(320px, 0.9fr)", gap: 24 }}>
-      <Diagram
-        title="IS–LM Simulator"
-        xLabel="Income / Output (Y)"
-        yLabel="Interest Rate (i)"
-        equilibrium={model.eq}
-        curves={[
-          { label: "IS", color: "#2563eb", path: pathFromFn(model.IS), labelX: 580, labelY: 100 },
-          { label: "LM", color: "#16a34a", path: pathFromFn(model.LM), labelX: 580, labelY: 245 },
-        ]}
-      />
-
-      <Card style={{ padding: 22 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Controls</div>
-        <SliderRow label="Government Spending" value={government} onChange={setGovernment} />
-        <SliderRow label="Money Supply" value={money} onChange={setMoney} />
-        <SliderRow label="Taxes" value={taxes} onChange={setTaxes} />
-
-        <div style={{ marginTop: 20, padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e5e7eb" }}>
-          <div style={{ marginBottom: 8 }}><strong>Equilibrium income:</strong> {model.eq.x.toFixed(2)}</div>
-          <div style={{ marginBottom: 8 }}><strong>Interest rate:</strong> {model.eq.y.toFixed(2)}</div>
-          <div><strong>Interpretation:</strong> {model.text}</div>
+        <div class="tabs">
+          <button class="tab-btn active" id="tab-adas">AD–AS Model</button>
+          <button class="tab-btn" id="tab-islm">IS–LM Model</button>
         </div>
-      </Card>
-    </div>
-  );
-}
-
-export default function EconomicPolicyVisualizerApp() {
-  const [tab, setTab] = useState("adas");
-
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)",
-        padding: 24,
-        fontFamily: "Inter, Arial, sans-serif",
-        color: "#111827",
-      }}
-    >
-      <div style={{ maxWidth: 1300, margin: "0 auto" }}>
-        <Card style={{ padding: 28, marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 38, fontWeight: 800, marginBottom: 8 }}>Economic Policy Visualizer</div>
-              <div style={{ fontSize: 18, color: "#4b5563", maxWidth: 860, lineHeight: 1.6 }}>
-                Interactive macroeconomic simulations for fiscal and monetary policy. Move the sliders and watch how equilibrium changes in the AD–AS and IS–LM models.
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Button active={tab === "adas"} onClick={() => setTab("adas")}>AD–AS Model</Button>
-              <Button active={tab === "islm"} onClick={() => setTab("islm")}>IS–LM Model</Button>
-            </div>
-          </div>
-        </Card>
-
-        {tab === "adas" ? <ADASView /> : <ISLMView />}
       </div>
     </div>
-  );
-}
 
+    <div id="adas-view" class="grid">
+      <div class="card diagram-card">
+        <div class="section-title">AD–AS Simulator</div>
+        <svg id="adas-svg" viewBox="0 0 760 420"></svg>
+      </div>
+      <div class="card controls-card">
+        <div class="section-title">Controls</div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Government Spending</span><strong id="g-value">50</strong></div>
+          <input id="g-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Money Supply</span><strong id="m-value">50</strong></div>
+          <input id="m-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Taxes</span><strong id="t-value">50</strong></div>
+          <input id="t-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Oil / Supply Shock</span><strong id="oil-value">0</strong></div>
+          <input id="oil-slider" type="range" min="0" max="100" value="0" />
+        </div>
+
+        <div class="info" id="adas-info"></div>
+      </div>
+    </div>
+
+    <div id="islm-view" class="grid" style="display:none;">
+      <div class="card diagram-card">
+        <div class="section-title">IS–LM Simulator</div>
+        <svg id="islm-svg" viewBox="0 0 760 420"></svg>
+      </div>
+      <div class="card controls-card">
+        <div class="section-title">Controls</div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Government Spending</span><strong id="ig-value">50</strong></div>
+          <input id="ig-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Money Supply</span><strong id="im-value">50</strong></div>
+          <input id="im-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-head"><span>Taxes</span><strong id="it-value">50</strong></div>
+          <input id="it-slider" type="range" min="0" max="100" value="50" />
+        </div>
+
+        <div class="info" id="islm-info"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const WIDTH = 760, HEIGHT = 420, PAD = 50;
+
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function toX(x, min = 0, max = 10) {
+      return PAD + ((x - min) / (max - min)) * (WIDTH - 2 * PAD);
+    }
+
+    function toY(y, min = 0, max = 10) {
+      return HEIGHT - PAD - ((y - min) / (max - min)) * (HEIGHT - 2 * PAD);
+    }
+
+    function makePath(fn, steps = 100) {
+      let d = '';
+      for (let i = 0; i <= steps; i++) {
+        const x = (i / steps) * 10;
+        const y = fn(x);
+        d += (i === 0 ? 'M' : 'L') + ' ' + toX(x) + ' ' + toY(y) + ' ';
+      }
+      return d;
+    }
+
+    function intersect(f, g) {
+      let bestX = 0, bestDiff = Infinity;
+      for (let i = 0; i <= 800; i++) {
+        const x = (i / 800) * 10;
+        const diff = Math.abs(f(x) - g(x));
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestX = x;
+        }
+      }
+      return { x: bestX, y: f(bestX) };
+    }
+
+    function line(x1, y1, x2, y2, color = '#111827', width = 2, dash = '') {
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${width}" ${dash ? `stroke-dasharray="${dash}"` : ''} />`;
+    }
+
+    function text(x, y, str, color = '#374151', size = 14, weight = 400) {
+      return `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" font-weight="${weight}">${str}</text>`;
+    }
+
+    function path(d, color) {
+      return `<path d="${d}" fill="none" stroke="${color}" stroke-width="3" />`;
+    }
+
+    function circle(cx, cy, r, color) {
+      return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />`;
+    }
+
+    function drawADAS() {
+      const g = Number(document.getElementById('g-slider').value);
+      const m = Number(document.getElementById('m-slider').value);
+      const t = Number(document.getElementById('t-slider').value);
+      const oil = Number(document.getElementById('oil-slider').value);
+
+      document.getElementById('g-value').textContent = g;
+      document.getElementById('m-value').textContent = m;
+      document.getElementById('t-value').textContent = t;
+      document.getElementById('oil-value').textContent = oil;
+
+      const gs = (g - 50) / 25;
+      const ms = (m - 50) / 25;
+      const ts = (t - 50) / 30;
+      const os = oil / 22;
+
+      const adShift = gs + ms - 0.9 * ts;
+      const srasShift = -os;
+
+      const AD = x => clamp(8.3 - 0.62 * x + adShift, 0, 10);
+      const SRAS = x => clamp(2.0 + 0.58 * x + srasShift, 0, 10);
+      const LRAS = clamp(5.8 - 0.5 * os, 2.8, 8.5);
+      const eq = intersect(AD, SRAS);
+
+      let interpretation = 'Stable macro environment.';
+      if (os > 0.7 && adShift > 0.4) interpretation = 'Stagflation risk: prices rise while supply worsens.';
+      else if (os > 0.7) interpretation = 'Negative supply shock: SRAS shifts left, prices rise, output tends to fall.';
+      else if (adShift > 0.7) interpretation = 'Expansionary demand policy: AD shifts right, output and prices rise.';
+      else if (adShift < -0.7) interpretation = 'Contractionary demand policy: AD shifts left, output and prices fall.';
+
+      document.getElementById('adas-info').innerHTML =
+        `<div><strong>Equilibrium output:</strong> ${eq.x.toFixed(2)}</div>` +
+        `<div><strong>Equilibrium price level:</strong> ${eq.y.toFixed(2)}</div>` +
+        `<div><strong>Interpretation:</strong> ${interpretation}</div>`;
+
+      let svg = '';
+      svg += line(PAD, HEIGHT - PAD, WIDTH - PAD, HEIGHT - PAD);
+      svg += line(PAD, HEIGHT - PAD, PAD, PAD);
+      svg += text(WIDTH - PAD - 90, HEIGHT - PAD + 30, 'Real Output (Y)');
+      svg += text(16, PAD - 14, 'Price Level (P)');
+
+      [2,4,6,8].forEach(v => {
+        svg += line(toX(v), PAD, toX(v), HEIGHT - PAD, '#f3f4f6', 1);
+        svg += line(PAD, toY(v), WIDTH - PAD, toY(v), '#f3f4f6', 1);
+      });
+
+      svg += line(toX(LRAS), PAD, toX(LRAS), HEIGHT - PAD, '#6b7280', 2, '8 7');
+      svg += text(toX(LRAS) + 8, 72, 'LRAS', '#374151', 14, 700);
+
+      svg += path(makePath(AD), '#2563eb');
+      svg += text(585, 112, 'AD', '#2563eb', 15, 700);
+
+      svg += path(makePath(SRAS), '#dc2626');
+      svg += text(560, 210, 'SRAS', '#dc2626', 15, 700);
+
+      svg += line(toX(eq.x), toY(eq.y), toX(eq.x), HEIGHT - PAD, '#9ca3af', 1.5, '5 5');
+      svg += line(PAD, toY(eq.y), toX(eq.x), toY(eq.y), '#9ca3af', 1.5, '5 5');
+      svg += circle(toX(eq.x), toY(eq.y), 6, '#111827');
+      svg += text(toX(eq.x) + 10, toY(eq.y) - 10, 'E', '#111827', 14, 700);
+
+      document.getElementById('adas-svg').innerHTML = svg;
+    }
+
+    function drawISLM() {
+      const g = Number(document.getElementById('ig-slider').value);
+      const m = Number(document.getElementById('im-slider').value);
+      const t = Number(document.getElementById('it-slider').value);
+
+      document.getElementById('ig-value').textContent = g;
+      document.getElementById('im-value').textContent = m;
+      document.getElementById('it-value').textContent = t;
+
+      const gs = (g - 50) / 25;
+      const ms = (m - 50) / 25;
+      const ts = (t - 50) / 30;
+
+      const IS = x => clamp(8.6 - 0.66 * x + gs - 0.9 * ts, 0, 10);
+      const LM = x => clamp(2.0 + 0.55 * x - ms, 0, 10);
+      const eq = intersect(IS, LM);
+
+      let interpretation = 'Balanced policy mix.';
+      if (gs > 0.6 && ms > 0.6) interpretation = 'Strong expansionary fiscal and monetary mix.';
+      else if (gs > 0.6) interpretation = 'Fiscal expansion shifts IS to the right.';
+      else if (ms > 0.6) interpretation = 'Monetary expansion shifts LM down/right.';
+      else if (ts > 0.6) interpretation = 'Higher taxes shift IS left.';
+
+      document.getElementById('islm-info').innerHTML =
+        `<div><strong>Equilibrium income:</strong> ${eq.x.toFixed(2)}</div>` +
+        `<div><strong>Interest rate:</strong> ${eq.y.toFixed(2)}</div>` +
+        `<div><strong>Interpretation:</strong> ${interpretation}</div>`;
+
+      let svg = '';
+      svg += line(PAD, HEIGHT - PAD, WIDTH - PAD, HEIGHT - PAD);
+      svg += line(PAD, HEIGHT - PAD, PAD, PAD);
+      svg += text(WIDTH - PAD - 110, HEIGHT - PAD + 30, 'Income / Output (Y)');
+      svg += text(16, PAD - 14, 'Interest Rate (i)');
+
+      [2,4,6,8].forEach(v => {
+        svg += line(toX(v), PAD, toX(v), HEIGHT - PAD, '#f3f4f6', 1);
+        svg += line(PAD, toY(v), WIDTH - PAD, toY(v), '#f3f4f6', 1);
+      });
+
+      svg += path(makePath(IS), '#2563eb');
+      svg += text(585, 102, 'IS', '#2563eb', 15, 700);
+
+      svg += path(makePath(LM), '#16a34a');
+      svg += text(585, 245, 'LM', '#16a34a', 15, 700);
+
+      svg += line(toX(eq.x), toY(eq.y), toX(eq.x), HEIGHT - PAD, '#9ca3af', 1.5, '5 5');
+      svg += line(PAD, toY(eq.y), toX(eq.x), toY(eq.y), '#9ca3af', 1.5, '5 5');
+      svg += circle(toX(eq.x), toY(eq.y), 6, '#111827');
+      svg += text(toX(eq.x) + 10, toY(eq.y) - 10, 'E', '#111827', 14, 700);
+
+      document.getElementById('islm-svg').innerHTML = svg;
+    }
+
+    function activateTab(tab) {
+      const adasBtn = document.getElementById('tab-adas');
+      const islmBtn = document.getElementById('tab-islm');
+      const adasView = document.getElementById('adas-view');
+      const islmView = document.getElementById('islm-view');
+
+      if (tab === 'adas') {
+        adasBtn.classList.add('active');
+        islmBtn.classList.remove('active');
+        adasView.style.display = 'grid';
+        islmView.style.display = 'none';
+      } else {
+        islmBtn.classList.add('active');
+        adasBtn.classList.remove('active');
+        islmView.style.display = 'grid';
+        adasView.style.display = 'none';
+      }
+    }
+
+    document.getElementById('tab-adas').addEventListener('click', () => activateTab('adas'));
+    document.getElementById('tab-islm').addEventListener('click', () => activateTab('islm'));
+
+    ['g-slider', 'm-slider', 't-slider', 'oil-slider'].forEach(id => {
+      document.getElementById(id).addEventListener('input', drawADAS);
+    });
+
+    ['ig-slider', 'im-slider', 'it-slider'].forEach(id => {
+      document.getElementById(id).addEventListener('input', drawISLM);
+    });
+
+    drawADAS();
+    drawISLM();
+  </script>
+</body>
+</html>
+
+  
