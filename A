@@ -1,43 +1,92 @@
-import React, { useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState } from "react";
 
-const WIDTH = 520;
-const HEIGHT = 360;
-const PAD = 40;
+const WIDTH = 760;
+const HEIGHT = 420;
+const PAD = 50;
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
-function makeLinePoints(fn, xMin = 0, xMax = 10, n = 80) {
-  const pts = [];
-  for (let i = 0; i <= n; i++) {
-    const x = xMin + (i / n) * (xMax - xMin);
-    pts.push({ x, y: fn(x) });
+function Card({ children, style }) {
+  return (
+    <div
+      style={{
+        background: "white",
+        borderRadius: 24,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+        border: "1px solid #e5e7eb",
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Button({ children, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "10px 16px",
+        borderRadius: 14,
+        border: active ? "1px solid #111827" : "1px solid #d1d5db",
+        background: active ? "#111827" : "white",
+        color: active ? "white" : "#111827",
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SliderRow({ label, value, min = 0, max = 100, onChange }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 14 }}>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{ width: "100%" }}
+      />
+    </div>
+  );
+}
+
+function toScreenX(x, xMin = 0, xMax = 10) {
+  return PAD + ((x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
+}
+
+function toScreenY(y, yMin = 0, yMax = 10) {
+  return HEIGHT - PAD - ((y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
+}
+
+function pathFromFn(fn, xMin = 0, xMax = 10, steps = 100) {
+  let d = "";
+  for (let i = 0; i <= steps; i++) {
+    const x = xMin + (i / steps) * (xMax - xMin);
+    const y = fn(x);
+    const sx = toScreenX(x, xMin, xMax);
+    const sy = toScreenY(y);
+    d += `${i === 0 ? "M" : "L"} ${sx} ${sy} `;
   }
-  return pts;
+  return d;
 }
 
-function toSvg(points, xMin = 0, xMax = 10, yMin = 0, yMax = 10) {
-  return points
-    .map((p, i) => {
-      const sx = PAD + ((p.x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
-      const sy = HEIGHT - PAD - ((p.y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
-      return `${i === 0 ? 'M' : 'L'} ${sx.toFixed(1)} ${sy.toFixed(1)}`;
-    })
-    .join(' ');
-}
-
-function lineIntersection(f, g, xMin = 0, xMax = 10) {
+function approximateIntersection(f, g, xMin = 0, xMax = 10) {
   let bestX = xMin;
   let bestDiff = Infinity;
-  for (let i = 0; i <= 300; i++) {
-    const x = xMin + (i / 300) * (xMax - xMin);
+  for (let i = 0; i <= 800; i++) {
+    const x = xMin + (i / 800) * (xMax - xMin);
     const diff = Math.abs(f(x) - g(x));
     if (diff < bestDiff) {
       bestDiff = diff;
@@ -47,264 +96,227 @@ function lineIntersection(f, g, xMin = 0, xMax = 10) {
   return { x: bestX, y: f(bestX) };
 }
 
-function AxisLabel({ x, y, children }) {
-  return <text x={x} y={y} fontSize="12" className="fill-slate-600">{children}</text>;
-}
-
-function DiagramFrame({ xLabel, yLabel, children }) {
+function Diagram({ title, xLabel, yLabel, curves, equilibrium, verticalLineX }) {
   return (
-    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full max-w-2xl rounded-2xl bg-white shadow-sm border">
-      <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="currentColor" />
-      <line x1={PAD} y1={HEIGHT - PAD} x2={PAD} y2={PAD} stroke="currentColor" />
-      <AxisLabel x={WIDTH - PAD - 12} y={HEIGHT - PAD + 24}>{xLabel}</AxisLabel>
-      <AxisLabel x={10} y={PAD - 10}>{yLabel}</AxisLabel>
-      {children}
-    </svg>
+    <Card style={{ padding: 20 }}>
+      <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>{title}</div>
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} style={{ width: "100%", height: "auto", background: "#fff", borderRadius: 18 }}>
+        <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="#111827" strokeWidth="2" />
+        <line x1={PAD} y1={HEIGHT - PAD} x2={PAD} y2={PAD} stroke="#111827" strokeWidth="2" />
+
+        <text x={WIDTH - PAD - 40} y={HEIGHT - PAD + 30} fontSize="14" fill="#374151">{xLabel}</text>
+        <text x={16} y={PAD - 14} fontSize="14" fill="#374151">{yLabel}</text>
+
+        {[2, 4, 6, 8].map((t) => (
+          <g key={t}>
+            <line x1={toScreenX(t)} y1={PAD} x2={toScreenX(t)} y2={HEIGHT - PAD} stroke="#f3f4f6" />
+            <line x1={PAD} y1={toScreenY(t)} x2={WIDTH - PAD} y2={toScreenY(t)} stroke="#f3f4f6" />
+          </g>
+        ))}
+
+        {verticalLineX !== undefined && (
+          <>
+            <line
+              x1={toScreenX(verticalLineX)}
+              y1={PAD}
+              x2={toScreenX(verticalLineX)}
+              y2={HEIGHT - PAD}
+              stroke="#6b7280"
+              strokeDasharray="8 7"
+              strokeWidth="2"
+            />
+            <text x={toScreenX(verticalLineX) + 8} y={74} fontSize="14" fill="#374151">LRAS</text>
+          </>
+        )}
+
+        {curves.map((curve) => (
+          <g key={curve.label}>
+            <path
+              d={curve.path}
+              fill="none"
+              stroke={curve.color}
+              strokeWidth="3"
+              strokeDasharray={curve.dashed ? "8 6" : "0"}
+            />
+            <text x={curve.labelX} y={curve.labelY} fontSize="15" fill={curve.color} fontWeight="700">
+              {curve.label}
+            </text>
+          </g>
+        ))}
+
+        {equilibrium && (
+          <>
+            <line
+              x1={toScreenX(equilibrium.x)}
+              y1={toScreenY(equilibrium.y)}
+              x2={toScreenX(equilibrium.x)}
+              y2={HEIGHT - PAD}
+              stroke="#9ca3af"
+              strokeDasharray="5 5"
+            />
+            <line
+              x1={PAD}
+              y1={toScreenY(equilibrium.y)}
+              x2={toScreenX(equilibrium.x)}
+              y2={toScreenY(equilibrium.y)}
+              stroke="#9ca3af"
+              strokeDasharray="5 5"
+            />
+            <circle cx={toScreenX(equilibrium.x)} cy={toScreenY(equilibrium.y)} r="6" fill="#111827" />
+            <text x={toScreenX(equilibrium.x) + 10} y={toScreenY(equilibrium.y) - 10} fontSize="14" fill="#111827" fontWeight="700">
+              E
+            </text>
+          </>
+        )}
+      </svg>
+    </Card>
   );
 }
 
-function Curve({ path, label, labelX, labelY, dashed = false }) {
-  return (
-    <>
-      <path d={path} fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray={dashed ? '8 6' : '0'} />
-      <text x={labelX} y={labelY} fontSize="13" className="fill-slate-700 font-medium">{label}</text>
-    </>
-  );
-}
+function ADASView() {
+  const [government, setGovernment] = useState(50);
+  const [money, setMoney] = useState(50);
+  const [taxes, setTaxes] = useState(50);
+  const [oilShock, setOilShock] = useState(0);
 
-function EquilibriumPoint({ x, y, xMin = 0, xMax = 10, yMin = 0, yMax = 10, label = 'E' }) {
-  const sx = PAD + ((x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
-  const sy = HEIGHT - PAD - ((y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
-  return (
-    <>
-      <circle cx={sx} cy={sy} r="5" className="fill-slate-900" />
-      <text x={sx + 8} y={sy - 8} fontSize="13" className="fill-slate-800 font-semibold">{label}</text>
-      <line x1={sx} y1={sy} x2={sx} y2={HEIGHT - PAD} stroke="currentColor" strokeDasharray="4 4" />
-      <line x1={PAD} y1={sy} x2={sx} y2={sy} stroke="currentColor" strokeDasharray="4 4" />
-    </>
-  );
-}
+  const model = useMemo(() => {
+    const g = (government - 50) / 25;
+    const m = (money - 50) / 25;
+    const t = (taxes - 50) / 30;
+    const oil = oilShock / 22;
 
-function PolicyLegend({ items }) {
-  return (
-    <div className="flex flex-wrap gap-2 mt-3">
-      {items.map((item) => (
-        <Badge key={item}>{item}</Badge>
-      ))}
-    </div>
-  );
-}
-
-function ADASModel() {
-  const [govSpend, setGovSpend] = useState([50]);
-  const [moneySupply, setMoneySupply] = useState([50]);
-  const [oilShock, setOilShock] = useState([0]);
-  const [taxShock, setTaxShock] = useState([0]);
-
-  const state = useMemo(() => {
-    const g = (govSpend[0] - 50) / 25;
-    const m = (moneySupply[0] - 50) / 25;
-    const oil = oilShock[0] / 20;
-    const tax = taxShock[0] / 20;
-
-    const adShift = g + m - 0.8 * tax;
+    const adShift = g + m - 0.9 * t;
     const srasShift = -oil;
 
-    const AD = (x) => clamp(8.1 - 0.58 * x + adShift, 0, 10);
-    const SRAS = (x) => clamp(2.2 + 0.55 * x + srasShift, 0, 10);
-    const LRASX = clamp(5.6 - 0.45 * oil, 2.5, 8.5);
+    const AD = (x) => clamp(8.3 - 0.62 * x + adShift, 0, 10);
+    const SRAS = (x) => clamp(2.0 + 0.58 * x + srasShift, 0, 10);
+    const LRAS = clamp(5.8 - 0.5 * oil, 2.8, 8.5);
+    const eq = approximateIntersection(AD, SRAS);
 
-    const eq = lineIntersection(AD, SRAS);
-    const inflationSignal = oil > 0.6 && adShift > 0.4 ? 'High inflation pressure' : oil > 0.6 ? 'Cost-push inflation' : adShift > 0.7 ? 'Demand-pull inflation' : 'Relatively stable';
+    let text = "Stable macro environment";
+    if (oil > 0.7 && adShift > 0.4) text = "Stagflation risk: prices rising while supply worsens.";
+    else if (oil > 0.7) text = "Negative supply shock: SRAS shifts left, price level rises, output tends to fall.";
+    else if (adShift > 0.7) text = "Expansionary demand policy: AD shifts right, output and prices rise.";
+    else if (adShift < -0.7) text = "Contractionary demand policy: AD shifts left, output and prices fall.";
 
-    return { AD, SRAS, LRASX, eq, inflationSignal, adShift, srasShift };
-  }, [govSpend, moneySupply, oilShock, taxShock]);
-
-  const adPath = toSvg(makeLinePoints(state.AD));
-  const srasPath = toSvg(makeLinePoints(state.SRAS));
-  const lrasX = PAD + (state.LRASX / 10) * (WIDTH - 2 * PAD);
+    return { AD, SRAS, LRAS, eq, text };
+  }, [government, money, taxes, oilShock]);
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      <Card className="lg:col-span-2 rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>AD–AS Policy Simulator</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DiagramFrame xLabel="Real Output (Y)" yLabel="Price Level (P)">
-            <Curve path={adPath} label="AD" labelX={360} labelY={100} />
-            <Curve path={srasPath} label="SRAS" labelX={330} labelY={180} />
-            <line x1={lrasX} y1={PAD} x2={lrasX} y2={HEIGHT - PAD} stroke="currentColor" strokeWidth="2" strokeDasharray="7 6" />
-            <text x={lrasX + 8} y={70} fontSize="13" className="fill-slate-700 font-medium">LRAS</text>
-            <EquilibriumPoint x={state.eq.x} y={state.eq.y} label="E1" />
-          </DiagramFrame>
-          <PolicyLegend items={['Fiscal expansion shifts AD right', 'Monetary expansion shifts AD right', 'Oil shock shifts SRAS left']} />
-        </CardContent>
-      </Card>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(320px, 0.9fr)", gap: 24 }}>
+      <Diagram
+        title="AD–AS Simulator"
+        xLabel="Real Output (Y)"
+        yLabel="Price Level (P)"
+        verticalLineX={model.LRAS}
+        equilibrium={model.eq}
+        curves={[
+          { label: "AD", color: "#2563eb", path: pathFromFn(model.AD), labelX: 580, labelY: 110 },
+          { label: "SRAS", color: "#dc2626", path: pathFromFn(model.SRAS), labelX: 560, labelY: 210 },
+        ]}
+      />
 
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Controls</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Government Spending</span><span>{govSpend[0]}</span></div>
-            <Slider value={govSpend} min={0} max={100} step={1} onValueChange={setGovSpend} />
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Money Supply</span><span>{moneySupply[0]}</span></div>
-            <Slider value={moneySupply} min={0} max={100} step={1} onValueChange={setMoneySupply} />
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Oil / Supply Shock</span><span>{oilShock[0]}</span></div>
-            <Slider value={oilShock} min={0} max={100} step={1} onValueChange={setOilShock} />
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Tax Increase</span><span>{taxShock[0]}</span></div>
-            <Slider value={taxShock} min={0} max={100} step={1} onValueChange={setTaxShock} />
-          </div>
+      <Card style={{ padding: 22 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Controls</div>
+        <SliderRow label="Government Spending" value={government} onChange={setGovernment} />
+        <SliderRow label="Money Supply" value={money} onChange={setMoney} />
+        <SliderRow label="Taxes" value={taxes} onChange={setTaxes} />
+        <SliderRow label="Oil / Supply Shock" value={oilShock} onChange={setOilShock} />
 
-          <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
-            <div className="text-sm"><strong>Equilibrium output:</strong> {state.eq.x.toFixed(2)}</div>
-            <div className="text-sm"><strong>Equilibrium price level:</strong> {state.eq.y.toFixed(2)}</div>
-            <div className="text-sm"><strong>Interpretation:</strong> {state.inflationSignal}</div>
-          </div>
-        </CardContent>
+        <div style={{ marginTop: 20, padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e5e7eb" }}>
+          <div style={{ marginBottom: 8 }}><strong>Equilibrium output:</strong> {model.eq.x.toFixed(2)}</div>
+          <div style={{ marginBottom: 8 }}><strong>Equilibrium price level:</strong> {model.eq.y.toFixed(2)}</div>
+          <div><strong>Interpretation:</strong> {model.text}</div>
+        </div>
       </Card>
     </div>
   );
 }
 
-function ISLMModel() {
-  const [government, setGovernment] = useState([50]);
-  const [money, setMoney] = useState([50]);
-  const [taxes, setTaxes] = useState([50]);
+function ISLMView() {
+  const [government, setGovernment] = useState(50);
+  const [money, setMoney] = useState(50);
+  const [taxes, setTaxes] = useState(50);
 
-  const state = useMemo(() => {
-    const g = (government[0] - 50) / 25;
-    const m = (money[0] - 50) / 25;
-    const t = (taxes[0] - 50) / 30;
+  const model = useMemo(() => {
+    const g = (government - 50) / 25;
+    const m = (money - 50) / 25;
+    const t = (taxes - 50) / 30;
 
-    const IS = (x) => clamp(8.4 - 0.62 * x + g - 0.8 * t, 0, 10);
-    const LM = (x) => clamp(2.1 + 0.52 * x - m, 0, 10);
-    const eq = lineIntersection(IS, LM);
+    const IS = (x) => clamp(8.6 - 0.66 * x + g - 0.9 * t, 0, 10);
+    const LM = (x) => clamp(2.0 + 0.55 * x - m, 0, 10);
+    const eq = approximateIntersection(IS, LM);
 
-    let narrative = 'Balanced stance';
-    if (g > 0.5 && m > 0.5) narrative = 'Strong expansionary mix';
-    else if (g > 0.5) narrative = 'Fiscal expansion';
-    else if (m > 0.5) narrative = 'Monetary expansion';
-    else if (t > 0.5) narrative = 'Contraction via taxes';
+    let text = "Balanced policy mix.";
+    if (g > 0.6 && m > 0.6) text = "Strong expansionary fiscal and monetary mix.";
+    else if (g > 0.6) text = "Fiscal expansion shifts IS to the right.";
+    else if (m > 0.6) text = "Monetary expansion shifts LM down/right.";
+    else if (t > 0.6) text = "Higher taxes contract demand and shift IS left.";
 
-    return { IS, LM, eq, narrative };
+    return { IS, LM, eq, text };
   }, [government, money, taxes]);
 
-  const isPath = toSvg(makeLinePoints(state.IS));
-  const lmPath = toSvg(makeLinePoints(state.LM));
-
   return (
-    <div className="grid lg:grid-cols-3 gap-6">
-      <Card className="lg:col-span-2 rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>IS–LM Policy Simulator</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <DiagramFrame xLabel="Income / Output (Y)" yLabel="Interest Rate (i)">
-            <Curve path={isPath} label="IS" labelX={360} labelY={90} />
-            <Curve path={lmPath} label="LM" labelX={335} labelY={205} />
-            <EquilibriumPoint x={state.eq.x} y={state.eq.y} label="E1" />
-          </DiagramFrame>
-          <PolicyLegend items={['Higher G shifts IS right', 'Higher taxes shift IS left', 'Higher money supply shifts LM right/down']} />
-        </CardContent>
-      </Card>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(320px, 0.9fr)", gap: 24 }}>
+      <Diagram
+        title="IS–LM Simulator"
+        xLabel="Income / Output (Y)"
+        yLabel="Interest Rate (i)"
+        equilibrium={model.eq}
+        curves={[
+          { label: "IS", color: "#2563eb", path: pathFromFn(model.IS), labelX: 580, labelY: 100 },
+          { label: "LM", color: "#16a34a", path: pathFromFn(model.LM), labelX: 580, labelY: 245 },
+        ]}
+      />
 
-      <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle>Controls</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Government Spending</span><span>{government[0]}</span></div>
-            <Slider value={government} min={0} max={100} step={1} onValueChange={setGovernment} />
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Money Supply</span><span>{money[0]}</span></div>
-            <Slider value={money} min={0} max={100} step={1} onValueChange={setMoney} />
-          </div>
-          <div>
-            <div className="flex justify-between text-sm mb-2"><span>Taxes</span><span>{taxes[0]}</span></div>
-            <Slider value={taxes} min={0} max={100} step={1} onValueChange={setTaxes} />
-          </div>
+      <Card style={{ padding: 22 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 18 }}>Controls</div>
+        <SliderRow label="Government Spending" value={government} onChange={setGovernment} />
+        <SliderRow label="Money Supply" value={money} onChange={setMoney} />
+        <SliderRow label="Taxes" value={taxes} onChange={setTaxes} />
 
-          <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
-            <div className="text-sm"><strong>Equilibrium income:</strong> {state.eq.x.toFixed(2)}</div>
-            <div className="text-sm"><strong>Equilibrium interest rate:</strong> {state.eq.y.toFixed(2)}</div>
-            <div className="text-sm"><strong>Policy mix:</strong> {state.narrative}</div>
-          </div>
-        </CardContent>
+        <div style={{ marginTop: 20, padding: 16, borderRadius: 16, background: "#f8fafc", border: "1px solid #e5e7eb" }}>
+          <div style={{ marginBottom: 8 }}><strong>Equilibrium income:</strong> {model.eq.x.toFixed(2)}</div>
+          <div style={{ marginBottom: 8 }}><strong>Interest rate:</strong> {model.eq.y.toFixed(2)}</div>
+          <div><strong>Interpretation:</strong> {model.text}</div>
+        </div>
       </Card>
     </div>
   );
 }
 
 export default function EconomicPolicyVisualizerApp() {
-  const [preset, setPreset] = useState('classroom');
+  const [tab, setTab] = useState("adas");
 
   return (
-    <div className="min-h-screen bg-slate-100 p-6 md:p-10">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="grid lg:grid-cols-[1.5fr_0.8fr] gap-6"
-        >
-          <Card className="rounded-3xl shadow-sm border-0 bg-gradient-to-br from-white to-slate-50">
-            <CardContent className="p-8">
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-                <Badge>Macroeconomics</Badge>
-                <Badge>Interactive Diagrams</Badge>
-                <Badge>Policy Simulation</Badge>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)",
+        padding: 24,
+        fontFamily: "Inter, Arial, sans-serif",
+        color: "#111827",
+      }}
+    >
+      <div style={{ maxWidth: 1300, margin: "0 auto" }}>
+        <Card style={{ padding: 28, marginBottom: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 38, fontWeight: 800, marginBottom: 8 }}>Economic Policy Visualizer</div>
+              <div style={{ fontSize: 18, color: "#4b5563", maxWidth: 860, lineHeight: 1.6 }}>
+                Interactive macroeconomic simulations for fiscal and monetary policy. Move the sliders and watch how equilibrium changes in the AD–AS and IS–LM models.
               </div>
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">Economic Policy Visualizer</h1>
-              <p className="mt-3 text-slate-600 max-w-2xl leading-7">
-                A web app where students, teachers, and analysts can manipulate fiscal and monetary policy variables and instantly see how macroeconomic diagrams shift.
-              </p>
-              <div className="mt-5 flex gap-3 flex-wrap">
-                <Button onClick={() => setPreset('classroom')}>Classroom Mode</Button>
-                <Button variant="outline" onClick={() => setPreset('exam')}>Exam Practice</Button>
-                <Button variant="outline" onClick={() => setPreset('research')}>Research Demo</Button>
-              </div>
-              <div className="mt-4 text-sm text-slate-500">Current preset: <strong>{preset}</strong></div>
-            </CardContent>
-          </Card>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Button active={tab === "adas"} onClick={() => setTab("adas")}>AD–AS Model</Button>
+              <Button active={tab === "islm"} onClick={() => setTab("islm")}>IS–LM Model</Button>
+            </div>
+          </div>
+        </Card>
 
-          <Card className="rounded-3xl shadow-sm">
-            <CardHeader>
-              <CardTitle>Best use cases</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm text-slate-700 leading-6">
-              <div>• University macroeconomics teaching</div>
-              <div>• Student self-study and policy intuition</div>
-              <div>• Blog visualizations and explainers</div>
-              <div>• Interactive case studies: inflation, recession, oil shocks</div>
-              <div>• Comparing fiscal vs monetary interventions</div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <Tabs defaultValue="adas" className="space-y-6">
-          <TabsList className="grid grid-cols-2 w-full max-w-md">
-            <TabsTrigger value="adas">AD–AS</TabsTrigger>
-            <TabsTrigger value="islm">IS–LM</TabsTrigger>
-          </TabsList>
-          <TabsContent value="adas">
-            <ADASModel />
-          </TabsContent>
-          <TabsContent value="islm">
-            <ISLMModel />
-          </TabsContent>
-        </Tabs>
+        {tab === "adas" ? <ADASView /> : <ISLMView />}
       </div>
     </div>
   );
 }
+
