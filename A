@@ -1,0 +1,310 @@
+import React, { useMemo, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Slider } from '@/components/ui/slider';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { motion } from 'framer-motion';
+
+const WIDTH = 520;
+const HEIGHT = 360;
+const PAD = 40;
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function makeLinePoints(fn, xMin = 0, xMax = 10, n = 80) {
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const x = xMin + (i / n) * (xMax - xMin);
+    pts.push({ x, y: fn(x) });
+  }
+  return pts;
+}
+
+function toSvg(points, xMin = 0, xMax = 10, yMin = 0, yMax = 10) {
+  return points
+    .map((p, i) => {
+      const sx = PAD + ((p.x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
+      const sy = HEIGHT - PAD - ((p.y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
+      return `${i === 0 ? 'M' : 'L'} ${sx.toFixed(1)} ${sy.toFixed(1)}`;
+    })
+    .join(' ');
+}
+
+function lineIntersection(f, g, xMin = 0, xMax = 10) {
+  let bestX = xMin;
+  let bestDiff = Infinity;
+  for (let i = 0; i <= 300; i++) {
+    const x = xMin + (i / 300) * (xMax - xMin);
+    const diff = Math.abs(f(x) - g(x));
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestX = x;
+    }
+  }
+  return { x: bestX, y: f(bestX) };
+}
+
+function AxisLabel({ x, y, children }) {
+  return <text x={x} y={y} fontSize="12" className="fill-slate-600">{children}</text>;
+}
+
+function DiagramFrame({ xLabel, yLabel, children }) {
+  return (
+    <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full max-w-2xl rounded-2xl bg-white shadow-sm border">
+      <line x1={PAD} y1={HEIGHT - PAD} x2={WIDTH - PAD} y2={HEIGHT - PAD} stroke="currentColor" />
+      <line x1={PAD} y1={HEIGHT - PAD} x2={PAD} y2={PAD} stroke="currentColor" />
+      <AxisLabel x={WIDTH - PAD - 12} y={HEIGHT - PAD + 24}>{xLabel}</AxisLabel>
+      <AxisLabel x={10} y={PAD - 10}>{yLabel}</AxisLabel>
+      {children}
+    </svg>
+  );
+}
+
+function Curve({ path, label, labelX, labelY, dashed = false }) {
+  return (
+    <>
+      <path d={path} fill="none" stroke="currentColor" strokeWidth="2.5" strokeDasharray={dashed ? '8 6' : '0'} />
+      <text x={labelX} y={labelY} fontSize="13" className="fill-slate-700 font-medium">{label}</text>
+    </>
+  );
+}
+
+function EquilibriumPoint({ x, y, xMin = 0, xMax = 10, yMin = 0, yMax = 10, label = 'E' }) {
+  const sx = PAD + ((x - xMin) / (xMax - xMin)) * (WIDTH - 2 * PAD);
+  const sy = HEIGHT - PAD - ((y - yMin) / (yMax - yMin)) * (HEIGHT - 2 * PAD);
+  return (
+    <>
+      <circle cx={sx} cy={sy} r="5" className="fill-slate-900" />
+      <text x={sx + 8} y={sy - 8} fontSize="13" className="fill-slate-800 font-semibold">{label}</text>
+      <line x1={sx} y1={sy} x2={sx} y2={HEIGHT - PAD} stroke="currentColor" strokeDasharray="4 4" />
+      <line x1={PAD} y1={sy} x2={sx} y2={sy} stroke="currentColor" strokeDasharray="4 4" />
+    </>
+  );
+}
+
+function PolicyLegend({ items }) {
+  return (
+    <div className="flex flex-wrap gap-2 mt-3">
+      {items.map((item) => (
+        <Badge key={item}>{item}</Badge>
+      ))}
+    </div>
+  );
+}
+
+function ADASModel() {
+  const [govSpend, setGovSpend] = useState([50]);
+  const [moneySupply, setMoneySupply] = useState([50]);
+  const [oilShock, setOilShock] = useState([0]);
+  const [taxShock, setTaxShock] = useState([0]);
+
+  const state = useMemo(() => {
+    const g = (govSpend[0] - 50) / 25;
+    const m = (moneySupply[0] - 50) / 25;
+    const oil = oilShock[0] / 20;
+    const tax = taxShock[0] / 20;
+
+    const adShift = g + m - 0.8 * tax;
+    const srasShift = -oil;
+
+    const AD = (x) => clamp(8.1 - 0.58 * x + adShift, 0, 10);
+    const SRAS = (x) => clamp(2.2 + 0.55 * x + srasShift, 0, 10);
+    const LRASX = clamp(5.6 - 0.45 * oil, 2.5, 8.5);
+
+    const eq = lineIntersection(AD, SRAS);
+    const inflationSignal = oil > 0.6 && adShift > 0.4 ? 'High inflation pressure' : oil > 0.6 ? 'Cost-push inflation' : adShift > 0.7 ? 'Demand-pull inflation' : 'Relatively stable';
+
+    return { AD, SRAS, LRASX, eq, inflationSignal, adShift, srasShift };
+  }, [govSpend, moneySupply, oilShock, taxShock]);
+
+  const adPath = toSvg(makeLinePoints(state.AD));
+  const srasPath = toSvg(makeLinePoints(state.SRAS));
+  const lrasX = PAD + (state.LRASX / 10) * (WIDTH - 2 * PAD);
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6">
+      <Card className="lg:col-span-2 rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>AD–AS Policy Simulator</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DiagramFrame xLabel="Real Output (Y)" yLabel="Price Level (P)">
+            <Curve path={adPath} label="AD" labelX={360} labelY={100} />
+            <Curve path={srasPath} label="SRAS" labelX={330} labelY={180} />
+            <line x1={lrasX} y1={PAD} x2={lrasX} y2={HEIGHT - PAD} stroke="currentColor" strokeWidth="2" strokeDasharray="7 6" />
+            <text x={lrasX + 8} y={70} fontSize="13" className="fill-slate-700 font-medium">LRAS</text>
+            <EquilibriumPoint x={state.eq.x} y={state.eq.y} label="E1" />
+          </DiagramFrame>
+          <PolicyLegend items={['Fiscal expansion shifts AD right', 'Monetary expansion shifts AD right', 'Oil shock shifts SRAS left']} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>Controls</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Government Spending</span><span>{govSpend[0]}</span></div>
+            <Slider value={govSpend} min={0} max={100} step={1} onValueChange={setGovSpend} />
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Money Supply</span><span>{moneySupply[0]}</span></div>
+            <Slider value={moneySupply} min={0} max={100} step={1} onValueChange={setMoneySupply} />
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Oil / Supply Shock</span><span>{oilShock[0]}</span></div>
+            <Slider value={oilShock} min={0} max={100} step={1} onValueChange={setOilShock} />
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Tax Increase</span><span>{taxShock[0]}</span></div>
+            <Slider value={taxShock} min={0} max={100} step={1} onValueChange={setTaxShock} />
+          </div>
+
+          <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
+            <div className="text-sm"><strong>Equilibrium output:</strong> {state.eq.x.toFixed(2)}</div>
+            <div className="text-sm"><strong>Equilibrium price level:</strong> {state.eq.y.toFixed(2)}</div>
+            <div className="text-sm"><strong>Interpretation:</strong> {state.inflationSignal}</div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ISLMModel() {
+  const [government, setGovernment] = useState([50]);
+  const [money, setMoney] = useState([50]);
+  const [taxes, setTaxes] = useState([50]);
+
+  const state = useMemo(() => {
+    const g = (government[0] - 50) / 25;
+    const m = (money[0] - 50) / 25;
+    const t = (taxes[0] - 50) / 30;
+
+    const IS = (x) => clamp(8.4 - 0.62 * x + g - 0.8 * t, 0, 10);
+    const LM = (x) => clamp(2.1 + 0.52 * x - m, 0, 10);
+    const eq = lineIntersection(IS, LM);
+
+    let narrative = 'Balanced stance';
+    if (g > 0.5 && m > 0.5) narrative = 'Strong expansionary mix';
+    else if (g > 0.5) narrative = 'Fiscal expansion';
+    else if (m > 0.5) narrative = 'Monetary expansion';
+    else if (t > 0.5) narrative = 'Contraction via taxes';
+
+    return { IS, LM, eq, narrative };
+  }, [government, money, taxes]);
+
+  const isPath = toSvg(makeLinePoints(state.IS));
+  const lmPath = toSvg(makeLinePoints(state.LM));
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6">
+      <Card className="lg:col-span-2 rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>IS–LM Policy Simulator</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DiagramFrame xLabel="Income / Output (Y)" yLabel="Interest Rate (i)">
+            <Curve path={isPath} label="IS" labelX={360} labelY={90} />
+            <Curve path={lmPath} label="LM" labelX={335} labelY={205} />
+            <EquilibriumPoint x={state.eq.x} y={state.eq.y} label="E1" />
+          </DiagramFrame>
+          <PolicyLegend items={['Higher G shifts IS right', 'Higher taxes shift IS left', 'Higher money supply shifts LM right/down']} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle>Controls</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Government Spending</span><span>{government[0]}</span></div>
+            <Slider value={government} min={0} max={100} step={1} onValueChange={setGovernment} />
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Money Supply</span><span>{money[0]}</span></div>
+            <Slider value={money} min={0} max={100} step={1} onValueChange={setMoney} />
+          </div>
+          <div>
+            <div className="flex justify-between text-sm mb-2"><span>Taxes</span><span>{taxes[0]}</span></div>
+            <Slider value={taxes} min={0} max={100} step={1} onValueChange={setTaxes} />
+          </div>
+
+          <div className="rounded-xl border p-4 bg-slate-50 space-y-2">
+            <div className="text-sm"><strong>Equilibrium income:</strong> {state.eq.x.toFixed(2)}</div>
+            <div className="text-sm"><strong>Equilibrium interest rate:</strong> {state.eq.y.toFixed(2)}</div>
+            <div className="text-sm"><strong>Policy mix:</strong> {state.narrative}</div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export default function EconomicPolicyVisualizerApp() {
+  const [preset, setPreset] = useState('classroom');
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-6 md:p-10">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="grid lg:grid-cols-[1.5fr_0.8fr] gap-6"
+        >
+          <Card className="rounded-3xl shadow-sm border-0 bg-gradient-to-br from-white to-slate-50">
+            <CardContent className="p-8">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <Badge>Macroeconomics</Badge>
+                <Badge>Interactive Diagrams</Badge>
+                <Badge>Policy Simulation</Badge>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900">Economic Policy Visualizer</h1>
+              <p className="mt-3 text-slate-600 max-w-2xl leading-7">
+                A web app where students, teachers, and analysts can manipulate fiscal and monetary policy variables and instantly see how macroeconomic diagrams shift.
+              </p>
+              <div className="mt-5 flex gap-3 flex-wrap">
+                <Button onClick={() => setPreset('classroom')}>Classroom Mode</Button>
+                <Button variant="outline" onClick={() => setPreset('exam')}>Exam Practice</Button>
+                <Button variant="outline" onClick={() => setPreset('research')}>Research Demo</Button>
+              </div>
+              <div className="mt-4 text-sm text-slate-500">Current preset: <strong>{preset}</strong></div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl shadow-sm">
+            <CardHeader>
+              <CardTitle>Best use cases</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-700 leading-6">
+              <div>• University macroeconomics teaching</div>
+              <div>• Student self-study and policy intuition</div>
+              <div>• Blog visualizations and explainers</div>
+              <div>• Interactive case studies: inflation, recession, oil shocks</div>
+              <div>• Comparing fiscal vs monetary interventions</div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <Tabs defaultValue="adas" className="space-y-6">
+          <TabsList className="grid grid-cols-2 w-full max-w-md">
+            <TabsTrigger value="adas">AD–AS</TabsTrigger>
+            <TabsTrigger value="islm">IS–LM</TabsTrigger>
+          </TabsList>
+          <TabsContent value="adas">
+            <ADASModel />
+          </TabsContent>
+          <TabsContent value="islm">
+            <ISLMModel />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
