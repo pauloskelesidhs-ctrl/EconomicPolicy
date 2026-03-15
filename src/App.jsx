@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 
 export default function App() {
-  const [model, setModel] = useState("AD-AS");
+  const [model, setModel] = useState("IS-LM");
   const [policyType, setPolicyType] = useState("Fiscal");
 
   const [govSpending, setGovSpending] = useState(120);
@@ -33,7 +33,8 @@ export default function App() {
 
   const policyEffects = useMemo(() => {
     const fiscalADShift = (govSpending - 120) * 0.7 - (taxes - 30) * 0.6;
-    const monetaryADShift = (moneySupply - 100) * 0.5 - (interestRate - 4) * 4;
+    const monetaryADShift =
+      (moneySupply - 100) * 0.5 - (interestRate - 4) * 4;
 
     const totalADShift = fiscalADShift + monetaryADShift;
     const totalSRASShift = oilShock * 12 + inflation * 1.3;
@@ -79,9 +80,11 @@ export default function App() {
 
     if (policyType === "Fiscal") {
       if (govSpending > 120 || taxes < 30) {
-        text += "Expansionary fiscal policy shifts aggregate demand to the right. ";
+        text +=
+          "Expansionary fiscal policy shifts aggregate demand to the right. ";
       } else if (govSpending < 120 || taxes > 30) {
-        text += "Contractionary fiscal policy shifts aggregate demand to the left. ";
+        text +=
+          "Contractionary fiscal policy shifts aggregate demand to the left. ";
       } else {
         text += "Fiscal policy is neutral. ";
       }
@@ -89,7 +92,8 @@ export default function App() {
 
     if (policyType === "Monetary") {
       if (moneySupply > 100 || interestRate < 4) {
-        text += "Expansionary monetary policy supports higher aggregate demand. ";
+        text +=
+          "Expansionary monetary policy supports higher aggregate demand. ";
       } else if (moneySupply < 100 || interestRate > 4) {
         text += "Contractionary monetary policy reduces aggregate demand. ";
       } else {
@@ -98,7 +102,8 @@ export default function App() {
     }
 
     if (oilShock > 1) {
-      text += "A stronger oil shock shifts SRAS left, raising prices and reducing output. ";
+      text +=
+        "A stronger oil shock shifts SRAS left, raising prices and reducing output. ";
     }
 
     if (equilibrium.y > policyEffects.potentialOutput + 2) {
@@ -122,7 +127,7 @@ export default function App() {
   ]);
 
   const resetAll = () => {
-    setModel("AD-AS");
+    setModel("IS-LM");
     setPolicyType("Fiscal");
     setGovSpending(120);
     setTaxes(30);
@@ -134,24 +139,28 @@ export default function App() {
 
   const applyExpansionaryFiscal = () => {
     setPolicyType("Fiscal");
+    setModel("IS-LM");
     setGovSpending(150);
     setTaxes(20);
   };
 
   const applyContractionaryFiscal = () => {
     setPolicyType("Fiscal");
+    setModel("IS-LM");
     setGovSpending(95);
     setTaxes(45);
   };
 
   const applyExpansionaryMonetary = () => {
     setPolicyType("Monetary");
+    setModel("IS-LM");
     setMoneySupply(130);
     setInterestRate(2);
   };
 
   const applyContractionaryMonetary = () => {
     setPolicyType("Monetary");
+    setModel("IS-LM");
     setMoneySupply(80);
     setInterestRate(7);
   };
@@ -165,11 +174,12 @@ export default function App() {
       <main className="layout">
         <aside className="sidebar">
           <div className="card">
-            <h2>Controls / Board</h2>
+            <h2>{policyType} Policy Controls</h2>
 
             <label className="field">
               <span>Model</span>
               <select value={model} onChange={(e) => setModel(e.target.value)}>
+                <option>IS-LM</option>
                 <option>AD-AS</option>
               </select>
             </label>
@@ -177,13 +187,20 @@ export default function App() {
             <div className="policy-switch">
               <button
                 className={policyType === "Fiscal" ? "tab active" : "tab"}
-                onClick={() => setPolicyType("Fiscal")}
+                onClick={() => {
+                  setPolicyType("Fiscal");
+                  setModel("IS-LM");
+                }}
               >
                 Fiscal Policy
               </button>
+
               <button
                 className={policyType === "Monetary" ? "tab active" : "tab"}
-                onClick={() => setPolicyType("Monetary")}
+                onClick={() => {
+                  setPolicyType("Monetary");
+                  setModel("IS-LM");
+                }}
               >
                 Monetary Policy
               </button>
@@ -215,7 +232,9 @@ export default function App() {
 
                 <div className="button-row">
                   <button onClick={applyExpansionaryFiscal}>Expansionary</button>
-                  <button onClick={applyContractionaryFiscal}>Contractionary</button>
+                  <button onClick={applyContractionaryFiscal}>
+                    Contractionary
+                  </button>
                 </div>
               </div>
             )}
@@ -245,8 +264,12 @@ export default function App() {
                 </label>
 
                 <div className="button-row">
-                  <button onClick={applyExpansionaryMonetary}>Expansionary</button>
-                  <button onClick={applyContractionaryMonetary}>Contractionary</button>
+                  <button onClick={applyExpansionaryMonetary}>
+                    Expansionary
+                  </button>
+                  <button onClick={applyContractionaryMonetary}>
+                    Contractionary
+                  </button>
                 </div>
               </div>
             )}
@@ -295,7 +318,7 @@ export default function App() {
 
         <section className="graph-section">
           <div className="card graph-card">
-            <h2>Graph Area</h2>
+            <h2>{model} Graph</h2>
 
             <svg viewBox={`0 0 ${width} ${height}`} className="graph-svg">
               <line
