@@ -149,3 +149,10 @@ body {
     min-height: auto;
   }
 }
+.field input[type="text"] {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  font-size: 15px;
+  width: 100%;
+}
