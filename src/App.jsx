@@ -24,14 +24,17 @@ export default function App() {
 
   const xMin = 0;
   const xMax = 200;
-  const yMin = 0;
-  const yMax = 200;
+
+  const currentYMin = model === "AD-AS" ? 0 : -10;
+  const currentYMax = model === "AD-AS" ? 200 : 20;
 
   const scaleX = (x) =>
     margin.left + ((x - xMin) / (xMax - xMin)) * innerWidth;
 
   const scaleY = (y) =>
-    height - margin.bottom - ((y - yMin) / (yMax - yMin)) * innerHeight;
+    height -
+    margin.bottom -
+    ((y - currentYMin) / (currentYMax - currentYMin)) * innerHeight;
 
   // ---------- AD-AS ----------
   const adAsEffects = useMemo(() => {
@@ -51,6 +54,7 @@ export default function App() {
 
   const AD = (y) => 170 - 0.7 * y + adAsEffects.totalADShift;
   const SRAS = (y) => 30 + 0.6 * y + adAsEffects.totalSRASShift;
+  const LRAS = adAsEffects.potentialOutput;
 
   const adAsEquilibrium = useMemo(() => {
     const y =
@@ -62,25 +66,26 @@ export default function App() {
 
   // ---------- IS-LM ----------
   const isLmEffects = useMemo(() => {
-    const fiscalShift = (govSpending - 120) * 0.9 - (taxes - 30) * 0.8;
-    const monetaryShift =
-      (moneySupply - 100) * 0.8 - (interestRate - 4) * 6;
+    const fiscalISShift = (govSpending - 120) * 0.05 - (taxes - 30) * 0.04;
+    const monetaryLMShift =
+      (moneySupply - 100) * 0.05 - (interestRate - 4) * 0.6;
 
     return {
-      fiscalShift,
-      monetaryShift,
+      fiscalISShift,
+      monetaryLMShift,
       fullEmploymentOutput: 110,
     };
   }, [govSpending, taxes, moneySupply, interestRate]);
 
-  const IS = (y) => 140 - 0.5 * y + isLmEffects.fiscalShift;
-  const LM = (y) => 10 + 0.45 * y - isLmEffects.monetaryShift;
+  // IS = downward, LM = upward, FE = vertical
+  const IS = (y) => 18 - 0.07 * y + isLmEffects.fiscalISShift;
+  const LM = (y) => -2 + 0.09 * y - isLmEffects.monetaryLMShift;
   const FE = isLmEffects.fullEmploymentOutput;
 
   const isLmEquilibrium = useMemo(() => {
     const y =
-      (140 + isLmEffects.fiscalShift - 10 + isLmEffects.monetaryShift) /
-      (0.5 + 0.45);
+      (18 + 2 + isLmEffects.fiscalISShift + isLmEffects.monetaryLMShift) /
+      (0.07 + 0.09);
     const i = IS(y);
     return { y, i };
   }, [isLmEffects]);
@@ -101,7 +106,6 @@ export default function App() {
 
     if (!text) return;
 
-    // Supply-side / cost-push scenarios -> AD-AS
     if (
       text.includes("war") ||
       text.includes("transport cost") ||
@@ -119,7 +123,6 @@ export default function App() {
       return;
     }
 
-    // Fiscal expansion -> IS-LM
     if (
       text.includes("government spending increases") ||
       text.includes("increase government spending") ||
@@ -135,7 +138,6 @@ export default function App() {
       return;
     }
 
-    // Fiscal contraction -> IS-LM
     if (
       text.includes("government spending decreases") ||
       text.includes("cut government spending") ||
@@ -150,7 +152,6 @@ export default function App() {
       return;
     }
 
-    // Monetary expansion -> IS-LM
     if (
       text.includes("central bank lowers interest rates") ||
       text.includes("lowers interest rates") ||
@@ -166,7 +167,6 @@ export default function App() {
       return;
     }
 
-    // Monetary contraction -> IS-LM
     if (
       text.includes("central bank raises interest rates") ||
       text.includes("raises interest rates") ||
@@ -182,7 +182,6 @@ export default function App() {
       return;
     }
 
-    // Demand-side weakness -> AD-AS
     if (
       text.includes("consumer confidence falls") ||
       text.includes("investment falls") ||
@@ -196,7 +195,7 @@ export default function App() {
     }
 
     alert(
-      "Scenario not recognized yet. Try something like: 'A war increases transport costs', 'The central bank lowers interest rates', or 'The government increases public spending'."
+      "Scenario not recognized yet. Try: 'A war increases transport costs', 'The central bank lowers interest rates', or 'The government increases public spending'."
     );
   };
 
@@ -249,7 +248,12 @@ export default function App() {
           "This looks like a negative supply shock, so SRAS shifts left. ";
       }
 
-      if (govSpending > 120 || taxes < 30 || moneySupply > 100 || interestRate < 4) {
+      if (
+        govSpending > 120 ||
+        taxes < 30 ||
+        moneySupply > 100 ||
+        interestRate < 4
+      ) {
         text += "Demand conditions are relatively expansionary. ";
       } else if (
         govSpending < 120 ||
@@ -316,9 +320,10 @@ export default function App() {
     FE,
   ]);
 
-  const currentEq = model === "AD-AS"
-    ? { x: adAsEquilibrium.y, y: adAsEquilibrium.p }
-    : { x: isLmEquilibrium.y, y: isLmEquilibrium.i };
+  const currentEq =
+    model === "AD-AS"
+      ? { x: adAsEquilibrium.y, y: adAsEquilibrium.p }
+      : { x: isLmEquilibrium.y, y: isLmEquilibrium.i };
 
   const currentEqX = scaleX(currentEq.x);
   const currentEqY = scaleY(currentEq.y);
@@ -328,7 +333,7 @@ export default function App() {
   const isPath = makePath(IS);
   const lmPath = makePath(LM);
 
-  const lrasX = scaleX(adAsEffects.potentialOutput);
+  const lrasX = scaleX(LRAS);
   const feX = scaleX(FE);
 
   return (
@@ -438,8 +443,8 @@ export default function App() {
                   <span>Interest rate: {interestRate}%</span>
                   <input
                     type="range"
-                    min="0"
-                    max="12"
+                    min="-10"
+                    max="20"
                     value={interestRate}
                     onChange={(e) => setInterestRate(Number(e.target.value))}
                   />
@@ -456,29 +461,31 @@ export default function App() {
               </div>
             )}
 
-            <div className="panel-section">
-              <label className="field">
-                <span>Inflation: {inflation}%</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="20"
-                  value={inflation}
-                  onChange={(e) => setInflation(Number(e.target.value))}
-                />
-              </label>
+            {model === "AD-AS" && (
+              <div className="panel-section">
+                <label className="field">
+                  <span>Inflation: {inflation}%</span>
+                  <input
+                    type="range"
+                    min="-10"
+                    max="50"
+                    value={inflation}
+                    onChange={(e) => setInflation(Number(e.target.value))}
+                  />
+                </label>
 
-              <label className="field">
-                <span>Oil shock: {oilShock}</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="10"
-                  value={oilShock}
-                  onChange={(e) => setOilShock(Number(e.target.value))}
-                />
-              </label>
-            </div>
+                <label className="field">
+                  <span>Oil shock: {oilShock}</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="10"
+                    value={oilShock}
+                    onChange={(e) => setOilShock(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            )}
 
             <div className="button-row">
               <button className="reset-btn" onClick={resetAll}>
@@ -492,15 +499,18 @@ export default function App() {
 
               {model === "AD-AS" ? (
                 <p>
-                  <strong>Equilibrium output:</strong> {adAsEquilibrium.y.toFixed(1)}
+                  <strong>Equilibrium output:</strong>{" "}
+                  {adAsEquilibrium.y.toFixed(1)}
                   <br />
                   <strong>Price level:</strong> {adAsEquilibrium.p.toFixed(1)}
                 </p>
               ) : (
                 <p>
-                  <strong>Equilibrium income:</strong> {isLmEquilibrium.y.toFixed(1)}
+                  <strong>Equilibrium income:</strong>{" "}
+                  {isLmEquilibrium.y.toFixed(1)}
                   <br />
-                  <strong>Interest rate:</strong> {isLmEquilibrium.i.toFixed(1)}
+                  <strong>Interest rate:</strong>{" "}
+                  {isLmEquilibrium.i.toFixed(1)}
                 </p>
               )}
             </div>
@@ -512,7 +522,6 @@ export default function App() {
             <h2>{model} Graph</h2>
 
             <svg viewBox={`0 0 ${width} ${height}`} className="graph-svg">
-              {/* Axes */}
               <line
                 x1={margin.left}
                 y1={height - margin.bottom}
@@ -530,7 +539,6 @@ export default function App() {
                 strokeWidth="2"
               />
 
-              {/* Axis labels */}
               {model === "AD-AS" ? (
                 <>
                   <text x={width / 2 - 40} y={height - 15} fontSize="16">
@@ -542,7 +550,7 @@ export default function App() {
                 </>
               ) : (
                 <>
-                  <text x={width / 2 - 40} y={height - 15} fontSize="16">
+                  <text x={width / 2 - 55} y={height - 15} fontSize="16">
                     Income / Output (Y)
                   </text>
                   <text x="18" y="28" fontSize="16">
@@ -558,8 +566,17 @@ export default function App() {
                     AD
                   </text>
 
-                  <path d={srasPath} fill="none" stroke="#dc2626" strokeWidth="3" />
-                  <text x={scaleX(145)} y={scaleY(SRAS(145)) - 8} fill="#dc2626">
+                  <path
+                    d={srasPath}
+                    fill="none"
+                    stroke="#dc2626"
+                    strokeWidth="3"
+                  />
+                  <text
+                    x={scaleX(145)}
+                    y={scaleY(SRAS(145)) - 8}
+                    fill="#dc2626"
+                  >
                     SRAS
                   </text>
 
@@ -603,7 +620,6 @@ export default function App() {
                 </>
               )}
 
-              {/* Equilibrium guides */}
               <line
                 x1={currentEqX}
                 y1={currentEqY}
@@ -621,13 +637,11 @@ export default function App() {
                 strokeDasharray="5 5"
               />
 
-              {/* Equilibrium point */}
               <circle cx={currentEqX} cy={currentEqY} r="5" fill="#111827" />
               <text x={currentEqX + 8} y={currentEqY - 8}>
                 E
               </text>
 
-              {/* Numeric markers */}
               <text
                 x={currentEqX - 12}
                 y={height - margin.bottom + 20}
