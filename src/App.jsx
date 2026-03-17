@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
+import { CreateMLCEngine } from "@mlc-ai/web-llm";
 
 export default function App() {
   const [model, setModel] = useState("IS-LM");
@@ -14,6 +15,13 @@ export default function App() {
   const [oilShock, setOilShock] = useState(1);
 
   const [scenarioText, setScenarioText] = useState("");
+
+  const [aiReady, setAiReady] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiStatus, setAiStatus] = useState("AI not loaded");
+  const [aiExplanation, setAiExplanation] = useState("");
+
+  const engineRef = useRef(null);
 
   const width = 820;
   const height = 540;
@@ -77,7 +85,6 @@ export default function App() {
     };
   }, [govSpending, taxes, moneySupply, interestRate]);
 
-  // IS = downward, LM = upward, FE = vertical
   const IS = (y) => 18 - 0.07 * y + isLmEffects.fiscalISShift;
   const LM = (y) => -2 + 0.09 * y - isLmEffects.monetaryLMShift;
   const FE = isLmEffects.fullEmploymentOutput;
@@ -101,102 +108,171 @@ export default function App() {
     return d;
   };
 
-  const applyScenario = () => {
-    const text = scenarioText.toLowerCase().trim();
+  const applyStructuredShock = (result) => {
+    const shockModel = result.model || "AD-AS";
+    const curve = result.curve || "";
+    const direction = result.direction || "";
+    const policy = result.policyType || "None";
+    const strength = Math.max(1, Math.min(10, Number(result.strength) || 5));
 
-    if (!text) return;
+    setAiExplanation(result.explanation || "");
 
-    if (
-      text.includes("war") ||
-      text.includes("transport cost") ||
-      text.includes("shipping cost") ||
-      text.includes("freight") ||
-      text.includes("energy price") ||
-      text.includes("gas price") ||
-      text.includes("natural gas") ||
-      text.includes("oil shock") ||
-      text.includes("supply shock") ||
-      text.includes("production cost")
-    ) {
+    if (shockModel === "AD-AS") {
       setModel("AD-AS");
-      setOilShock(8);
-      return;
+
+      if (curve === "SRAS" && direction === "left") {
+        setOilShock(strength);
+        return;
+      }
+
+      if (curve === "AD" && direction === "right") {
+        setGovSpending(120 + strength * 4);
+        setTaxes(Math.max(0, 30 - strength * 2));
+        return;
+      }
+
+      if (curve === "AD" && direction === "left") {
+        setGovSpending(Math.max(80, 120 - strength * 3));
+        setTaxes(Math.min(100, 30 + strength * 2));
+        return;
+      }
     }
 
-    if (
-      text.includes("government spending increases") ||
-      text.includes("increase government spending") ||
-      text.includes("public spending increases") ||
-      text.includes("fiscal expansion") ||
-      text.includes("tax cut") ||
-      text.includes("taxes fall")
-    ) {
-      setPolicyType("Fiscal");
+    if (shockModel === "IS-LM") {
       setModel("IS-LM");
-      setGovSpending(150);
-      setTaxes(20);
+
+      if (policy === "Fiscal" || curve === "IS") {
+        setPolicyType("Fiscal");
+
+        if (direction === "right") {
+          setGovSpending(120 + strength * 4);
+          setTaxes(Math.max(0, 30 - strength * 2));
+          return;
+        }
+
+        if (direction === "left") {
+          setGovSpending(Math.max(80, 120 - strength * 3));
+          setTaxes(Math.min(100, 30 + strength * 2));
+          return;
+        }
+      }
+
+      if (policy === "Monetary" || curve === "LM") {
+        setPolicyType("Monetary");
+
+        if (direction === "right" || direction === "down") {
+          setMoneySupply(100 + strength * 4);
+          setInterestRate(Math.max(-10, 4 - Math.round(strength / 2)));
+          return;
+        }
+
+        if (direction === "left" || direction === "up") {
+          setMoneySupply(Math.max(60, 100 - strength * 4));
+          setInterestRate(Math.min(20, 4 + Math.round(strength / 2)));
+          return;
+        }
+      }
+    }
+  };
+
+  const loadAI = async () => {
+    if (engineRef.current) {
+      setAiReady(true);
+      setAiStatus("AI ready");
       return;
     }
 
-    if (
-      text.includes("government spending decreases") ||
-      text.includes("cut government spending") ||
-      text.includes("tax increase") ||
-      text.includes("taxes increase") ||
-      text.includes("fiscal contraction")
-    ) {
-      setPolicyType("Fiscal");
-      setModel("IS-LM");
-      setGovSpending(95);
-      setTaxes(45);
-      return;
+    try {
+      setAiLoading(true);
+      setAiStatus("Loading AI model...");
+
+      const engine = await CreateMLCEngine(
+        "Llama-3.1-8B-Instruct-q4f32_1-MLC",
+        {
+          initProgressCallback: (report) => {
+            if (report?.text) {
+              setAiStatus(report.text);
+            } else {
+              setAiStatus("Loading AI model...");
+            }
+          },
+        }
+      );
+
+      engineRef.current = engine;
+      setAiReady(true);
+      setAiStatus("AI ready");
+    } catch (error) {
+      console.error(error);
+      setAiStatus("AI failed to load");
+      alert(
+        "AI could not load on this device/browser. Your manual scenario rules can still be used."
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const analyzeScenarioWithAI = async () => {
+    if (!scenarioText.trim()) return;
+
+    if (!engineRef.current) {
+      await loadAI();
     }
 
-    if (
-      text.includes("central bank lowers interest rates") ||
-      text.includes("lowers interest rates") ||
-      text.includes("increase money supply") ||
-      text.includes("money supply increases") ||
-      text.includes("expansionary monetary policy") ||
-      text.includes("monetary expansion")
-    ) {
-      setPolicyType("Monetary");
-      setModel("IS-LM");
-      setMoneySupply(130);
-      setInterestRate(2);
-      return;
-    }
+    if (!engineRef.current) return;
 
-    if (
-      text.includes("central bank raises interest rates") ||
-      text.includes("raises interest rates") ||
-      text.includes("decrease money supply") ||
-      text.includes("money supply decreases") ||
-      text.includes("monetary tightening") ||
-      text.includes("contractionary monetary policy")
-    ) {
-      setPolicyType("Monetary");
-      setModel("IS-LM");
-      setMoneySupply(80);
-      setInterestRate(7);
-      return;
-    }
+    try {
+      setAiStatus("Analyzing scenario...");
 
-    if (
-      text.includes("consumer confidence falls") ||
-      text.includes("investment falls") ||
-      text.includes("recession") ||
-      text.includes("demand shock")
-    ) {
-      setModel("AD-AS");
-      setGovSpending(95);
-      setTaxes(45);
-      return;
-    }
+      const messages = [
+        {
+          role: "system",
+          content: `
+You are an economics classifier for a teaching app.
+Return ONLY valid JSON with this exact schema:
+{
+  "model": "AD-AS" or "IS-LM",
+  "policyType": "Fiscal" or "Monetary" or "None",
+  "shockType": "short phrase",
+  "curve": "AD" or "SRAS" or "IS" or "LM" or "FE",
+  "direction": "left" or "right" or "up" or "down",
+  "strength": number from 1 to 10,
+  "explanation": "one short explanation for students"
+}
 
-    alert(
-      "Scenario not recognized yet. Try: 'A war increases transport costs', 'The central bank lowers interest rates', or 'The government increases public spending'."
-    );
+Rules:
+- Cost increases, wars, shipping/transport costs, energy price spikes, gas price increases -> AD-AS, SRAS, left
+- Government spending increases or tax cuts -> IS-LM, Fiscal, IS, right
+- Government spending cuts or tax increases -> IS-LM, Fiscal, IS, left
+- Money supply increases or interest-rate cuts by the central bank -> IS-LM, Monetary, LM, right
+- Money supply decreases or interest-rate hikes by the central bank -> IS-LM, Monetary, LM, left
+- Consumer confidence or investment falls -> AD-AS, AD, left
+
+Return JSON only.
+          `.trim(),
+        },
+        {
+          role: "user",
+          content: scenarioText,
+        },
+      ];
+
+      const response = await engineRef.current.chat.completions.create({
+        messages,
+        temperature: 0.2,
+      });
+
+      const raw = response.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(raw);
+
+      applyStructuredShock(parsed);
+      setAiStatus("Scenario analyzed");
+    } catch (error) {
+      console.error(error);
+      setAiStatus("AI analysis failed");
+      alert("AI could not parse the scenario. Try a shorter sentence.");
+    }
   };
 
   const resetAll = () => {
@@ -209,6 +285,7 @@ export default function App() {
     setInflation(4);
     setOilShock(1);
     setScenarioText("");
+    setAiExplanation("");
   };
 
   const applyExpansionaryFiscal = () => {
@@ -240,6 +317,8 @@ export default function App() {
   };
 
   const interpretation = useMemo(() => {
+    if (aiExplanation) return aiExplanation;
+
     if (model === "AD-AS") {
       let text = "";
 
@@ -307,6 +386,7 @@ export default function App() {
 
     return text;
   }, [
+    aiExplanation,
     model,
     policyType,
     govSpending,
@@ -359,7 +439,16 @@ export default function App() {
               </label>
 
               <div className="button-row">
-                <button onClick={applyScenario}>Analyze Scenario</button>
+                <button onClick={loadAI} disabled={aiLoading}>
+                  {aiLoading ? "Loading AI..." : aiReady ? "AI Ready" : "Load AI"}
+                </button>
+                <button onClick={analyzeScenarioWithAI}>
+                  Analyze with AI
+                </button>
+              </div>
+
+              <div className="info-box">
+                <strong>AI status:</strong> {aiStatus}
               </div>
             </div>
 
