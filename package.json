@@ -1,4 +1,5 @@
-"name": "economic-policy-app",
+{
+  "name": "economic-policy-app",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -17,5 +18,4 @@
     "vite": "^7.0.0"
   }
 }
-
   
