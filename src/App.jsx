@@ -11,7 +11,8 @@ export default function App() {
   const [interestRate, setInterestRate] = useState(4);
 
   const [inflation, setInflation] = useState(4);
-  const [supplyShock, setSupplyShock] = useState(0);
+  const [shockType, setShockType] = useState("None");
+  const [shockStrength, setShockStrength] = useState(0);
 
   const [shockQuery, setShockQuery] = useState("");
   const [shockResult, setShockResult] = useState("");
@@ -37,21 +38,34 @@ export default function App() {
     margin.bottom -
     ((y - currentYMin) / (currentYMax - currentYMin)) * innerHeight;
 
+  const clearShockResult = () => setShockResult("");
+
   // ---------- AD-AS ----------
   const adAsEffects = useMemo(() => {
     const fiscalADShift = (govSpending - 120) * 0.7 - (taxes - 30) * 0.6;
     const monetaryADShift =
       (moneySupply - 100) * 0.5 - (interestRate - 4) * 4;
 
-    const totalADShift = fiscalADShift + monetaryADShift;
-    const totalSRASShift = supplyShock * 12 + inflation * 1.3;
+    const demandShockShift = shockType === "Demand" ? shockStrength * 8 : 0;
+    const supplyShockShift = shockType === "Supply" ? shockStrength * 12 : 0;
+
+    const totalADShift = fiscalADShift + monetaryADShift + demandShockShift;
+    const totalSRASShift = supplyShockShift + inflation * 1.3;
 
     return {
       totalADShift,
       totalSRASShift,
       potentialOutput: 110,
     };
-  }, [govSpending, taxes, moneySupply, interestRate, supplyShock, inflation]);
+  }, [
+    govSpending,
+    taxes,
+    moneySupply,
+    interestRate,
+    inflation,
+    shockType,
+    shockStrength,
+  ]);
 
   const AD = (y) => 170 - 0.7 * y + adAsEffects.totalADShift;
   const SRAS = (y) => 30 + 0.6 * y + adAsEffects.totalSRASShift;
@@ -108,9 +122,8 @@ export default function App() {
 
     if (q === "positive demand shock") {
       setModel("AD-AS");
-      setGovSpending(150);
-      setTaxes(20);
-      setSupplyShock(0);
+      setShockType("Demand");
+      setShockStrength(6);
       setInflation(4);
       setShockResult("Positive demand shock detected: AD shifts right.");
       return;
@@ -118,9 +131,8 @@ export default function App() {
 
     if (q === "negative demand shock") {
       setModel("AD-AS");
-      setGovSpending(95);
-      setTaxes(45);
-      setSupplyShock(0);
+      setShockType("Demand");
+      setShockStrength(-6);
       setInflation(2);
       setShockResult("Negative demand shock detected: AD shifts left.");
       return;
@@ -128,9 +140,8 @@ export default function App() {
 
     if (q === "positive supply shock") {
       setModel("AD-AS");
-      setGovSpending(120);
-      setTaxes(30);
-      setSupplyShock(-6);
+      setShockType("Supply");
+      setShockStrength(-6);
       setInflation(1);
       setShockResult("Positive supply shock detected: SRAS shifts right.");
       return;
@@ -138,9 +149,8 @@ export default function App() {
 
     if (q === "negative supply shock") {
       setModel("AD-AS");
-      setGovSpending(120);
-      setTaxes(30);
-      setSupplyShock(6);
+      setShockType("Supply");
+      setShockStrength(6);
       setInflation(6);
       setShockResult("Negative supply shock detected: SRAS shifts left.");
       return;
@@ -148,9 +158,8 @@ export default function App() {
 
     if (q === "stagflation") {
       setModel("AD-AS");
-      setGovSpending(120);
-      setTaxes(30);
-      setSupplyShock(8);
+      setShockType("Supply");
+      setShockStrength(8);
       setInflation(8);
       setShockResult(
         "Stagflation detected: negative supply shock with higher inflation and lower output."
@@ -171,12 +180,11 @@ export default function App() {
     setMoneySupply(100);
     setInterestRate(4);
     setInflation(4);
-    setSupplyShock(0);
+    setShockType("None");
+    setShockStrength(0);
     setShockQuery("");
     setShockResult("");
   };
-
-  const clearShockResult = () => setShockResult("");
 
   const applyExpansionaryFiscal = () => {
     clearShockResult();
@@ -216,14 +224,22 @@ export default function App() {
     if (model === "AD-AS") {
       let text = "";
 
-      if (supplyShock >= 6) {
+      if (shockType === "Supply" && shockStrength >= 6) {
         text += "Negative supply shock: SRAS shifts left. ";
-      } else if (supplyShock > 0) {
+      } else if (shockType === "Supply" && shockStrength > 0) {
         text += "Mild negative supply shock. ";
-      } else if (supplyShock <= -6) {
+      } else if (shockType === "Supply" && shockStrength <= -6) {
         text += "Positive supply shock: SRAS shifts right. ";
-      } else if (supplyShock < 0) {
+      } else if (shockType === "Supply" && shockStrength < 0) {
         text += "Mild positive supply shock. ";
+      } else if (shockType === "Demand" && shockStrength >= 6) {
+        text += "Positive demand shock: AD shifts right. ";
+      } else if (shockType === "Demand" && shockStrength > 0) {
+        text += "Mild positive demand shock. ";
+      } else if (shockType === "Demand" && shockStrength <= -6) {
+        text += "Negative demand shock: AD shifts left. ";
+      } else if (shockType === "Demand" && shockStrength < 0) {
+        text += "Mild negative demand shock. ";
       }
 
       if (
@@ -242,7 +258,11 @@ export default function App() {
         text += "Demand conditions are relatively contractionary. ";
       }
 
-      if (supplyShock > 5 && adAsEquilibrium.y < adAsEffects.potentialOutput - 2) {
+      if (
+        shockType === "Supply" &&
+        shockStrength > 5 &&
+        adAsEquilibrium.y < adAsEffects.potentialOutput - 2
+      ) {
         text += "This creates stagflation-like conditions. ";
       }
 
@@ -296,7 +316,8 @@ export default function App() {
     taxes,
     moneySupply,
     interestRate,
-    supplyShock,
+    shockType,
+    shockStrength,
     adAsEquilibrium,
     adAsEffects.potentialOutput,
     isLmEquilibrium,
@@ -481,15 +502,36 @@ export default function App() {
                 </label>
 
                 <label className="field">
-                  <span>Supply shock: {supplyShock}</span>
+                  <span>Shock type</span>
+                  <select
+                    value={shockType}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setShockType(e.target.value);
+                    }}
+                  >
+                    <option>None</option>
+                    <option>Demand</option>
+                    <option>Supply</option>
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>
+                    {shockType === "Demand"
+                      ? `Demand shock: ${shockStrength}`
+                      : shockType === "Supply"
+                      ? `Supply shock: ${shockStrength}`
+                      : `Shock intensity: ${shockStrength}`}
+                  </span>
                   <input
                     type="range"
                     min="-10"
                     max="10"
-                    value={supplyShock}
+                    value={shockStrength}
                     onChange={(e) => {
                       clearShockResult();
-                      setSupplyShock(Number(e.target.value));
+                      setShockStrength(Number(e.target.value));
                     }}
                   />
                 </label>
