@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "^0.2.82",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -18,4 +17,3 @@
     "vite": "^7.0.0"
   }
 }
-  
