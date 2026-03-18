@@ -1,6 +1,4 @@
-
-import React, { useMemo, useRef, useState } from "react";
-import { CreateMLCEngine } from "@mlc-ai/web-llm";
+import React, { useMemo, useState } from "react";
 
 export default function App() {
   const [model, setModel] = useState("IS-LM");
@@ -13,16 +11,10 @@ export default function App() {
   const [interestRate, setInterestRate] = useState(4);
 
   const [inflation, setInflation] = useState(4);
-  const [oilShock, setOilShock] = useState(1);
+  const [supplyShock, setSupplyShock] = useState(0);
 
-  const [scenarioText, setScenarioText] = useState("");
-
-  const [aiReady, setAiReady] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiStatus, setAiStatus] = useState("AI not loaded");
-  const [aiExplanation, setAiExplanation] = useState("");
-
-  const engineRef = useRef(null);
+  const [shockQuery, setShockQuery] = useState("");
+  const [shockResult, setShockResult] = useState("");
 
   const width = 820;
   const height = 540;
@@ -52,14 +44,14 @@ export default function App() {
       (moneySupply - 100) * 0.5 - (interestRate - 4) * 4;
 
     const totalADShift = fiscalADShift + monetaryADShift;
-    const totalSRASShift = oilShock * 12 + inflation * 1.3;
+    const totalSRASShift = supplyShock * 12 + inflation * 1.3;
 
     return {
       totalADShift,
       totalSRASShift,
       potentialOutput: 110,
     };
-  }, [govSpending, taxes, moneySupply, interestRate, oilShock, inflation]);
+  }, [govSpending, taxes, moneySupply, interestRate, supplyShock, inflation]);
 
   const AD = (y) => 170 - 0.7 * y + adAsEffects.totalADShift;
   const SRAS = (y) => 30 + 0.6 * y + adAsEffects.totalSRASShift;
@@ -109,171 +101,66 @@ export default function App() {
     return d;
   };
 
-  const applyStructuredShock = (result) => {
-    const shockModel = result.model || "AD-AS";
-    const curve = result.curve || "";
-    const direction = result.direction || "";
-    const policy = result.policyType || "None";
-    const strength = Math.max(1, Math.min(10, Number(result.strength) || 5));
+  const applyShockSearch = () => {
+    const q = shockQuery.toLowerCase().trim();
 
-    setAiExplanation(result.explanation || "");
+    if (!q) return;
 
-    if (shockModel === "AD-AS") {
+    if (q === "positive demand shock") {
       setModel("AD-AS");
-
-      if (curve === "SRAS" && direction === "left") {
-        setOilShock(strength);
-        return;
-      }
-
-      if (curve === "AD" && direction === "right") {
-        setGovSpending(120 + strength * 4);
-        setTaxes(Math.max(0, 30 - strength * 2));
-        return;
-      }
-
-      if (curve === "AD" && direction === "left") {
-        setGovSpending(Math.max(80, 120 - strength * 3));
-        setTaxes(Math.min(100, 30 + strength * 2));
-        return;
-      }
-    }
-
-    if (shockModel === "IS-LM") {
-      setModel("IS-LM");
-
-      if (policy === "Fiscal" || curve === "IS") {
-        setPolicyType("Fiscal");
-
-        if (direction === "right") {
-          setGovSpending(120 + strength * 4);
-          setTaxes(Math.max(0, 30 - strength * 2));
-          return;
-        }
-
-        if (direction === "left") {
-          setGovSpending(Math.max(80, 120 - strength * 3));
-          setTaxes(Math.min(100, 30 + strength * 2));
-          return;
-        }
-      }
-
-      if (policy === "Monetary" || curve === "LM") {
-        setPolicyType("Monetary");
-
-        if (direction === "right" || direction === "down") {
-          setMoneySupply(100 + strength * 4);
-          setInterestRate(Math.max(-10, 4 - Math.round(strength / 2)));
-          return;
-        }
-
-        if (direction === "left" || direction === "up") {
-          setMoneySupply(Math.max(60, 100 - strength * 4));
-          setInterestRate(Math.min(20, 4 + Math.round(strength / 2)));
-          return;
-        }
-      }
-    }
-  };
-
-  const loadAI = async () => {
-    if (engineRef.current) {
-      setAiReady(true);
-      setAiStatus("AI ready");
+      setGovSpending(150);
+      setTaxes(20);
+      setSupplyShock(0);
+      setInflation(4);
+      setShockResult("Positive demand shock detected: AD shifts right.");
       return;
     }
 
-    try {
-      setAiLoading(true);
-      setAiStatus("Loading AI model...");
+    if (q === "negative demand shock") {
+      setModel("AD-AS");
+      setGovSpending(95);
+      setTaxes(45);
+      setSupplyShock(0);
+      setInflation(2);
+      setShockResult("Negative demand shock detected: AD shifts left.");
+      return;
+    }
 
-      const engine = await CreateMLCEngine(
-        "Llama-3.1-8B-Instruct-q4f32_1-MLC",
-        {
-          initProgressCallback: (report) => {
-            if (report?.text) {
-              setAiStatus(report.text);
-            } else {
-              setAiStatus("Loading AI model...");
-            }
-          },
-        }
+    if (q === "positive supply shock") {
+      setModel("AD-AS");
+      setGovSpending(120);
+      setTaxes(30);
+      setSupplyShock(-6);
+      setInflation(1);
+      setShockResult("Positive supply shock detected: SRAS shifts right.");
+      return;
+    }
+
+    if (q === "negative supply shock") {
+      setModel("AD-AS");
+      setGovSpending(120);
+      setTaxes(30);
+      setSupplyShock(6);
+      setInflation(6);
+      setShockResult("Negative supply shock detected: SRAS shifts left.");
+      return;
+    }
+
+    if (q === "stagflation") {
+      setModel("AD-AS");
+      setGovSpending(120);
+      setTaxes(30);
+      setSupplyShock(8);
+      setInflation(8);
+      setShockResult(
+        "Stagflation detected: negative supply shock with higher inflation and lower output."
       );
-
-      engineRef.current = engine;
-      setAiReady(true);
-      setAiStatus("AI ready");
-    } catch (error) {
-      console.error(error);
-      setAiStatus("AI failed to load");
-      alert(
-        "AI could not load on this device/browser. Your manual scenario rules can still be used."
-      );
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const analyzeScenarioWithAI = async () => {
-    if (!scenarioText.trim()) return;
-
-    if (!engineRef.current) {
-      await loadAI();
+      return;
     }
 
-    if (!engineRef.current) return;
-
-    try {
-      setAiStatus("Analyzing scenario...");
-
-      const messages = [
-        {
-          role: "system",
-          content: `
-You are an economics classifier for a teaching app.
-Return ONLY valid JSON with this exact schema:
-{
-  "model": "AD-AS" or "IS-LM",
-  "policyType": "Fiscal" or "Monetary" or "None",
-  "shockType": "short phrase",
-  "curve": "AD" or "SRAS" or "IS" or "LM" or "FE",
-  "direction": "left" or "right" or "up" or "down",
-  "strength": number from 1 to 10,
-  "explanation": "one short explanation for students"
-}
-
-Rules:
-- Cost increases, wars, shipping/transport costs, energy price spikes, gas price increases -> AD-AS, SRAS, left
-- Government spending increases or tax cuts -> IS-LM, Fiscal, IS, right
-- Government spending cuts or tax increases -> IS-LM, Fiscal, IS, left
-- Money supply increases or interest-rate cuts by the central bank -> IS-LM, Monetary, LM, right
-- Money supply decreases or interest-rate hikes by the central bank -> IS-LM, Monetary, LM, left
-- Consumer confidence or investment falls -> AD-AS, AD, left
-
-Return JSON only.
-          `.trim(),
-        },
-        {
-          role: "user",
-          content: scenarioText,
-        },
-      ];
-
-      const response = await engineRef.current.chat.completions.create({
-        messages,
-        temperature: 0.2,
-      });
-
-      const raw = response.choices[0]?.message?.content || "{}";
-      const parsed = JSON.parse(raw);
-
-      applyStructuredShock(parsed);
-      setAiStatus("Scenario analyzed");
-    } catch (error) {
-      console.error(error);
-      setAiStatus("AI analysis failed");
-      alert("AI could not parse the scenario. Try a shorter sentence.");
-    }
+    alert(
+      "Use one of these exact inputs: positive demand shock, negative demand shock, positive supply shock, negative supply shock, stagflation."
+    );
   };
 
   const resetAll = () => {
@@ -284,12 +171,15 @@ Return JSON only.
     setMoneySupply(100);
     setInterestRate(4);
     setInflation(4);
-    setOilShock(1);
-    setScenarioText("");
-    setAiExplanation("");
+    setSupplyShock(0);
+    setShockQuery("");
+    setShockResult("");
   };
 
+  const clearShockResult = () => setShockResult("");
+
   const applyExpansionaryFiscal = () => {
+    clearShockResult();
     setPolicyType("Fiscal");
     setModel("IS-LM");
     setGovSpending(150);
@@ -297,6 +187,7 @@ Return JSON only.
   };
 
   const applyContractionaryFiscal = () => {
+    clearShockResult();
     setPolicyType("Fiscal");
     setModel("IS-LM");
     setGovSpending(95);
@@ -304,6 +195,7 @@ Return JSON only.
   };
 
   const applyExpansionaryMonetary = () => {
+    clearShockResult();
     setPolicyType("Monetary");
     setModel("IS-LM");
     setMoneySupply(130);
@@ -311,6 +203,7 @@ Return JSON only.
   };
 
   const applyContractionaryMonetary = () => {
+    clearShockResult();
     setPolicyType("Monetary");
     setModel("IS-LM");
     setMoneySupply(80);
@@ -318,14 +211,19 @@ Return JSON only.
   };
 
   const interpretation = useMemo(() => {
-    if (aiExplanation) return aiExplanation;
+    if (shockResult) return shockResult;
 
     if (model === "AD-AS") {
       let text = "";
 
-      if (oilShock > 1) {
-        text +=
-          "This looks like a negative supply shock, so SRAS shifts left. ";
+      if (supplyShock >= 6) {
+        text += "Negative supply shock: SRAS shifts left. ";
+      } else if (supplyShock > 0) {
+        text += "Mild negative supply shock. ";
+      } else if (supplyShock <= -6) {
+        text += "Positive supply shock: SRAS shifts right. ";
+      } else if (supplyShock < 0) {
+        text += "Mild positive supply shock. ";
       }
 
       if (
@@ -342,6 +240,10 @@ Return JSON only.
         interestRate > 4
       ) {
         text += "Demand conditions are relatively contractionary. ";
+      }
+
+      if (supplyShock > 5 && adAsEquilibrium.y < adAsEffects.potentialOutput - 2) {
+        text += "This creates stagflation-like conditions. ";
       }
 
       if (adAsEquilibrium.y > adAsEffects.potentialOutput + 2) {
@@ -387,14 +289,14 @@ Return JSON only.
 
     return text;
   }, [
-    aiExplanation,
+    shockResult,
     model,
     policyType,
     govSpending,
     taxes,
     moneySupply,
     interestRate,
-    oilShock,
+    supplyShock,
     adAsEquilibrium,
     adAsEffects.potentialOutput,
     isLmEquilibrium,
@@ -430,32 +332,29 @@ Return JSON only.
 
             <div className="panel-section">
               <label className="field">
-                <span>Scenario Engine</span>
+                <span>Shock Search Engine</span>
                 <input
                   type="text"
-                  value={scenarioText}
-                  onChange={(e) => setScenarioText(e.target.value)}
-                  placeholder="Example: A war increases transport costs"
+                  value={shockQuery}
+                  onChange={(e) => setShockQuery(e.target.value)}
+                  placeholder="positive demand shock, negative supply shock, stagflation"
                 />
               </label>
 
               <div className="button-row">
-                <button onClick={loadAI} disabled={aiLoading}>
-                  {aiLoading ? "Loading AI..." : aiReady ? "AI Ready" : "Load AI"}
-                </button>
-                <button onClick={analyzeScenarioWithAI}>
-                  Analyze with AI
-                </button>
-              </div>
-
-              <div className="info-box">
-                <strong>AI status:</strong> {aiStatus}
+                <button onClick={applyShockSearch}>Apply Shock</button>
               </div>
             </div>
 
             <label className="field">
               <span>Model</span>
-              <select value={model} onChange={(e) => setModel(e.target.value)}>
+              <select
+                value={model}
+                onChange={(e) => {
+                  clearShockResult();
+                  setModel(e.target.value);
+                }}
+              >
                 <option>IS-LM</option>
                 <option>AD-AS</option>
               </select>
@@ -465,6 +364,7 @@ Return JSON only.
               <button
                 className={policyType === "Fiscal" ? "tab active" : "tab"}
                 onClick={() => {
+                  clearShockResult();
                   setPolicyType("Fiscal");
                   setModel("IS-LM");
                 }}
@@ -475,6 +375,7 @@ Return JSON only.
               <button
                 className={policyType === "Monetary" ? "tab active" : "tab"}
                 onClick={() => {
+                  clearShockResult();
                   setPolicyType("Monetary");
                   setModel("IS-LM");
                 }}
@@ -492,7 +393,10 @@ Return JSON only.
                     min="80"
                     max="180"
                     value={govSpending}
-                    onChange={(e) => setGovSpending(Number(e.target.value))}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setGovSpending(Number(e.target.value));
+                    }}
                   />
                 </label>
 
@@ -503,7 +407,10 @@ Return JSON only.
                     min="0"
                     max="100"
                     value={taxes}
-                    onChange={(e) => setTaxes(Number(e.target.value))}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setTaxes(Number(e.target.value));
+                    }}
                   />
                 </label>
 
@@ -525,7 +432,10 @@ Return JSON only.
                     min="60"
                     max="160"
                     value={moneySupply}
-                    onChange={(e) => setMoneySupply(Number(e.target.value))}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setMoneySupply(Number(e.target.value));
+                    }}
                   />
                 </label>
 
@@ -536,7 +446,10 @@ Return JSON only.
                     min="-10"
                     max="20"
                     value={interestRate}
-                    onChange={(e) => setInterestRate(Number(e.target.value))}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setInterestRate(Number(e.target.value));
+                    }}
                   />
                 </label>
 
@@ -560,18 +473,24 @@ Return JSON only.
                     min="-10"
                     max="50"
                     value={inflation}
-                    onChange={(e) => setInflation(Number(e.target.value))}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setInflation(Number(e.target.value));
+                    }}
                   />
                 </label>
 
                 <label className="field">
-                  <span>Oil shock: {oilShock}</span>
+                  <span>Supply shock: {supplyShock}</span>
                   <input
                     type="range"
-                    min="0"
+                    min="-10"
                     max="10"
-                    value={oilShock}
-                    onChange={(e) => setOilShock(Number(e.target.value))}
+                    value={supplyShock}
+                    onChange={(e) => {
+                      clearShockResult();
+                      setSupplyShock(Number(e.target.value));
+                    }}
                   />
                 </label>
               </div>
