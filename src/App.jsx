@@ -1,344 +1,210 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export default function App() {
+  // ── current state ─────────────────────────────────────────────────────────
   const [model, setModel] = useState("IS-LM");
   const [policyType, setPolicyType] = useState("Fiscal");
 
   const [govSpending, setGovSpending] = useState(120);
   const [taxes, setTaxes] = useState(30);
-
   const [moneySupply, setMoneySupply] = useState(100);
   const [interestRate, setInterestRate] = useState(4);
-
   const [inflation, setInflation] = useState(4);
   const [shockType, setShockType] = useState("None");
   const [shockStrength, setShockStrength] = useState(0);
 
+  // IS-MP
+  const [mpSlope, setMpSlope] = useState(0.05);
+  const [naturalRate, setNaturalRate] = useState(2);
+  const [outputGap, setOutputGap] = useState(0);
+
   const [shockQuery, setShockQuery] = useState("");
   const [shockResult, setShockResult] = useState("");
 
-  const width = 820;
-  const height = 540;
-  const margin = { top: 30, right: 30, bottom: 55, left: 70 };
+  // ── ghost / previous curve state ──────────────────────────────────────────
+  const [ghost, setGhost] = useState(null);
 
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  const xMin = 0;
-  const xMax = 200;
-
-  const currentYMin = model === "AD-AS" ? 0 : -10;
-  const currentYMax = model === "AD-AS" ? 200 : 20;
-
-  const scaleX = (x) =>
-    margin.left + ((x - xMin) / (xMax - xMin)) * innerWidth;
-
-  const scaleY = (y) =>
-    height -
-    margin.bottom -
-    ((y - currentYMin) / (currentYMax - currentYMin)) * innerHeight;
+  const captureGhost = (currentModel) => {
+    setGhost({
+      model: currentModel,
+      govSpending, taxes, moneySupply, interestRate, inflation,
+      shockType, shockStrength, mpSlope, naturalRate, outputGap,
+    });
+  };
 
   const clearShockResult = () => setShockResult("");
 
-  // ---------- AD-AS ----------
-  const adAsEffects = useMemo(() => {
-    const fiscalADShift = (govSpending - 120) * 0.7 - (taxes - 30) * 0.6;
-    const monetaryADShift =
-      (moneySupply - 100) * 0.5 - (interestRate - 4) * 4;
+  // ── SVG geometry ──────────────────────────────────────────────────────────
+  const width = 820;
+  const height = 540;
+  const margin = { top: 30, right: 30, bottom: 55, left: 70 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const xMin = 0; const xMax = 200;
 
-    const demandShockShift = shockType === "Demand" ? shockStrength * 8 : 0;
-    const supplyShockShift = shockType === "Supply" ? shockStrength * 12 : 0;
+  const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14] };
+  const [currentYMin, currentYMax] = yRanges[model] ?? [-10, 20];
 
+  const scaleX = (x) => margin.left + ((x - xMin) / (xMax - xMin)) * innerWidth;
+  const scaleY = (y) =>
+    height - margin.bottom - ((y - currentYMin) / (currentYMax - currentYMin)) * innerHeight;
+
+  // ── curve builders (pure, take a params object) ───────────────────────────
+  function buildAdAs(p) {
+    const fiscalADShift = (p.govSpending - 120) * 0.7 - (p.taxes - 30) * 0.6;
+    const monetaryADShift = (p.moneySupply - 100) * 0.5 - (p.interestRate - 4) * 4;
+    const demandShockShift = p.shockType === "Demand" ? p.shockStrength * 8 : 0;
+    const supplyShockShift = p.shockType === "Supply" ? p.shockStrength * 12 : 0;
     const totalADShift = fiscalADShift + monetaryADShift + demandShockShift;
-    const totalSRASShift = supplyShockShift + inflation * 1.3;
+    const totalSRASShift = supplyShockShift + p.inflation * 1.3;
+    const AD = (y) => 170 - 0.7 * y + totalADShift;
+    const SRAS = (y) => 30 + 0.6 * y + totalSRASShift;
+    const eqY = (170 + totalADShift - 30 - totalSRASShift) / (0.7 + 0.6);
+    const eqP = AD(eqY);
+    return { AD, SRAS, potentialOutput: 110, eq: { x: clamp(eqY, 0, 200), y: clamp(eqP, 0, 200) } };
+  }
 
-    return {
-      totalADShift,
-      totalSRASShift,
-      potentialOutput: 110,
-    };
-  }, [
-    govSpending,
-    taxes,
-    moneySupply,
-    interestRate,
-    inflation,
-    shockType,
-    shockStrength,
-  ]);
+  function buildIsLm(p) {
+    const fiscalISShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
+    const monetaryLMShift = (p.moneySupply - 100) * 0.05 - (p.interestRate - 4) * 0.6;
+    const IS = (y) => 18 - 0.07 * y + fiscalISShift;
+    const LM = (y) => -2 + 0.09 * y - monetaryLMShift;
+    const eqY = (18 + 2 + fiscalISShift + monetaryLMShift) / (0.07 + 0.09);
+    const eqI = IS(eqY);
+    return { IS, LM, fullEmploymentOutput: 110, eq: { x: clamp(eqY, 0, 200), y: clamp(eqI, -10, 20) } };
+  }
 
-  const AD = (y) => 170 - 0.7 * y + adAsEffects.totalADShift;
-  const SRAS = (y) => 30 + 0.6 * y + adAsEffects.totalSRASShift;
-  const LRAS = adAsEffects.potentialOutput;
+  function buildIsMp(p) {
+    const fiscalISShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
+    const feOutput = 110 + p.outputGap * 2;
+    const IS = (y) => 12 - 0.06 * y + fiscalISShift;
+    const MP = (y) => p.naturalRate + p.mpSlope * (y - feOutput);
+    const denom = 0.06 + p.mpSlope;
+    const eqY = (12 + fiscalISShift - p.naturalRate + p.mpSlope * feOutput) / denom;
+    const eqR = IS(eqY);
+    return { IS, MP, feOutput, naturalRate: p.naturalRate, eq: { x: clamp(eqY, 0, 200), y: clamp(eqR, -2, 14) } };
+  }
 
-  const adAsEquilibrium = useMemo(() => {
-    const y =
-      (170 + adAsEffects.totalADShift - 30 - adAsEffects.totalSRASShift) /
-      (0.7 + 0.6);
-    const p = AD(y);
-    return { y, p };
-  }, [adAsEffects]);
+  // ── current curves ────────────────────────────────────────────────────────
+  const currentParams = { govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength, mpSlope, naturalRate, outputGap };
 
-  // ---------- IS-LM ----------
-  const isLmEffects = useMemo(() => {
-    const fiscalISShift = (govSpending - 120) * 0.05 - (taxes - 30) * 0.04;
-    const monetaryLMShift =
-      (moneySupply - 100) * 0.05 - (interestRate - 4) * 0.6;
+  const adAs = useMemo(() => buildAdAs(currentParams),
+    [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
+  const isLm = useMemo(() => buildIsLm(currentParams),
+    [govSpending, taxes, moneySupply, interestRate]);
+  const isMp = useMemo(() => buildIsMp(currentParams),
+    [govSpending, taxes, mpSlope, naturalRate, outputGap]);
 
-    return {
-      fiscalISShift,
-      monetaryLMShift,
-      fullEmploymentOutput: 110,
-    };
-  }, [govSpending, taxes, moneySupply, interestRate]);
+  // ── ghost curves ──────────────────────────────────────────────────────────
+  const ghostAdAs = useMemo(() => ghost && ghost.model === "AD-AS" ? buildAdAs(ghost) : null, [ghost]);
+  const ghostIsLm = useMemo(() => ghost && ghost.model === "IS-LM" ? buildIsLm(ghost) : null, [ghost]);
+  const ghostIsMp = useMemo(() => ghost && ghost.model === "IS-MP" ? buildIsMp(ghost) : null, [ghost]);
 
-  const IS = (y) => 18 - 0.07 * y + isLmEffects.fiscalISShift;
-  const LM = (y) => -2 + 0.09 * y - isLmEffects.monetaryLMShift;
-  const FE = isLmEffects.fullEmploymentOutput;
-
-  const isLmEquilibrium = useMemo(() => {
-    const y =
-      (18 + 2 + isLmEffects.fiscalISShift + isLmEffects.monetaryLMShift) /
-      (0.07 + 0.09);
-    const i = IS(y);
-    return { y, i };
-  }, [isLmEffects]);
-
+  // ── path builder ──────────────────────────────────────────────────────────
   const makePath = (fn) => {
     let d = "";
     for (let x = 0; x <= 200; x += 2) {
-      const y = fn(x);
       const px = scaleX(x);
-      const py = scaleY(y);
+      const py = scaleY(fn(x));
       d += x === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`;
     }
     return d;
   };
 
-  const applyShockSearch = () => {
-    const q = shockQuery.toLowerCase().trim();
-
-    if (!q) return;
-
-    if (q === "positive demand shock") {
-      setModel("AD-AS");
-      setShockType("Demand");
-      setShockStrength(6);
-      setInflation(4);
-      setShockResult("Positive demand shock detected: AD shifts right.");
-      return;
-    }
-
-    if (q === "negative demand shock") {
-      setModel("AD-AS");
-      setShockType("Demand");
-      setShockStrength(-6);
-      setInflation(2);
-      setShockResult("Negative demand shock detected: AD shifts left.");
-      return;
-    }
-
-    if (q === "positive supply shock") {
-      setModel("AD-AS");
-      setShockType("Supply");
-      setShockStrength(-6);
-      setInflation(1);
-      setShockResult("Positive supply shock detected: SRAS shifts right.");
-      return;
-    }
-
-    if (q === "negative supply shock") {
-      setModel("AD-AS");
-      setShockType("Supply");
-      setShockStrength(6);
-      setInflation(6);
-      setShockResult("Negative supply shock detected: SRAS shifts left.");
-      return;
-    }
-
-    if (q === "stagflation") {
-      setModel("AD-AS");
-      setShockType("Supply");
-      setShockStrength(8);
-      setInflation(8);
-      setShockResult(
-        "Stagflation detected: negative supply shock with higher inflation and lower output."
-      );
-      return;
-    }
-
-    alert(
-      "Use one of these exact inputs: positive demand shock, negative demand shock, positive supply shock, negative supply shock, stagflation."
-    );
+  // ── preset actions ────────────────────────────────────────────────────────
+  const applyPreset = (currentModel, fn) => {
+    captureGhost(currentModel);
+    clearShockResult();
+    fn();
   };
+
+  const SHOCK_PRESETS = {
+    "positive demand shock":    () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Demand");  setShockStrength(6);  setInflation(4); setShockResult("Positive demand shock: AD shifts right → higher output & prices."); }),
+    "negative demand shock":    () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Demand");  setShockStrength(-6); setInflation(2); setShockResult("Negative demand shock: AD shifts left → lower output & prices."); }),
+    "positive supply shock":    () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(-6); setInflation(1); setShockResult("Positive supply shock: SRAS shifts right → higher output, lower prices."); }),
+    "negative supply shock":    () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(6);  setInflation(6); setShockResult("Negative supply shock: SRAS shifts left → lower output, higher prices."); }),
+    "stagflation":              () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(8);  setInflation(8); setShockResult("Stagflation: severe negative supply shock → output ↓, prices ↑."); }),
+    "expansionary fiscal":      () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");    setGovSpending(150); setTaxes(20);   setShockResult("Expansionary fiscal: IS shifts right → higher income & interest rate."); }),
+    "contractionary fiscal":    () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");    setGovSpending(95);  setTaxes(45);   setShockResult("Contractionary fiscal: IS shifts left → lower income & interest rate."); }),
+    "expansionary monetary":    () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary");  setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: LM shifts right → higher income, lower rate."); }),
+    "contractionary monetary":  () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary");  setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
+  };
+
+  const applyShockSearch = () => {
+    const q = shockQuery.toLowerCase().trim().replace(/\s+/g, " ");
+    const preset = SHOCK_PRESETS[q];
+    if (preset) preset();
+    else alert(`Unknown scenario. Try:\n${Object.keys(SHOCK_PRESETS).join(", ")}`);
+  };
+
+  const applyExpansionaryFiscal    = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(150); setTaxes(20); });
+  const applyContractionaryFiscal  = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(95);  setTaxes(45); });
+  const applyExpansionaryMonetary  = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(130); setInterestRate(2); });
+  const applyContractionaryMonetary= () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(80);  setInterestRate(7); });
 
   const resetAll = () => {
-    setModel("IS-LM");
-    setPolicyType("Fiscal");
-    setGovSpending(120);
-    setTaxes(30);
-    setMoneySupply(100);
-    setInterestRate(4);
-    setInflation(4);
-    setShockType("None");
-    setShockStrength(0);
-    setShockQuery("");
-    setShockResult("");
+    setModel("IS-LM"); setPolicyType("Fiscal");
+    setGovSpending(120); setTaxes(30);
+    setMoneySupply(100); setInterestRate(4);
+    setInflation(4); setShockType("None"); setShockStrength(0);
+    setShockQuery(""); setShockResult("");
+    setNaturalRate(2); setMpSlope(0.05); setOutputGap(0);
+    setGhost(null);
   };
 
-  const applyExpansionaryFiscal = () => {
-    clearShockResult();
-    setPolicyType("Fiscal");
-    setModel("IS-LM");
-    setGovSpending(150);
-    setTaxes(20);
-  };
-
-  const applyContractionaryFiscal = () => {
-    clearShockResult();
-    setPolicyType("Fiscal");
-    setModel("IS-LM");
-    setGovSpending(95);
-    setTaxes(45);
-  };
-
-  const applyExpansionaryMonetary = () => {
-    clearShockResult();
-    setPolicyType("Monetary");
-    setModel("IS-LM");
-    setMoneySupply(130);
-    setInterestRate(2);
-  };
-
-  const applyContractionaryMonetary = () => {
-    clearShockResult();
-    setPolicyType("Monetary");
-    setModel("IS-LM");
-    setMoneySupply(80);
-    setInterestRate(7);
-  };
-
-  const interpretation = useMemo(() => {
-    if (shockResult) return shockResult;
-
-    if (model === "AD-AS") {
-      let text = "";
-
-      if (shockType === "Supply" && shockStrength >= 6) {
-        text += "Negative supply shock: SRAS shifts left. ";
-      } else if (shockType === "Supply" && shockStrength > 0) {
-        text += "Mild negative supply shock. ";
-      } else if (shockType === "Supply" && shockStrength <= -6) {
-        text += "Positive supply shock: SRAS shifts right. ";
-      } else if (shockType === "Supply" && shockStrength < 0) {
-        text += "Mild positive supply shock. ";
-      } else if (shockType === "Demand" && shockStrength >= 6) {
-        text += "Positive demand shock: AD shifts right. ";
-      } else if (shockType === "Demand" && shockStrength > 0) {
-        text += "Mild positive demand shock. ";
-      } else if (shockType === "Demand" && shockStrength <= -6) {
-        text += "Negative demand shock: AD shifts left. ";
-      } else if (shockType === "Demand" && shockStrength < 0) {
-        text += "Mild negative demand shock. ";
-      }
-
-      if (
-        govSpending > 120 ||
-        taxes < 30 ||
-        moneySupply > 100 ||
-        interestRate < 4
-      ) {
-        text += "Demand conditions are relatively expansionary. ";
-      } else if (
-        govSpending < 120 ||
-        taxes > 30 ||
-        moneySupply < 100 ||
-        interestRate > 4
-      ) {
-        text += "Demand conditions are relatively contractionary. ";
-      }
-
-      if (
-        shockType === "Supply" &&
-        shockStrength > 5 &&
-        adAsEquilibrium.y < adAsEffects.potentialOutput - 2
-      ) {
-        text += "This creates stagflation-like conditions. ";
-      }
-
-      if (adAsEquilibrium.y > adAsEffects.potentialOutput + 2) {
-        text += "Output is above potential, suggesting an inflationary gap.";
-      } else if (adAsEquilibrium.y < adAsEffects.potentialOutput - 2) {
-        text += "Output is below potential, suggesting a recessionary gap.";
-      } else {
-        text += "The economy is near long-run equilibrium.";
-      }
-
-      return text;
-    }
-
-    let text = "";
-
-    if (policyType === "Fiscal") {
-      if (govSpending > 120 || taxes < 30) {
-        text += "Expansionary fiscal policy shifts IS to the right. ";
-      } else if (govSpending < 120 || taxes > 30) {
-        text += "Contractionary fiscal policy shifts IS to the left. ";
-      } else {
-        text += "Fiscal policy is neutral. ";
-      }
-    }
-
-    if (policyType === "Monetary") {
-      if (moneySupply > 100 || interestRate < 4) {
-        text += "Expansionary monetary policy shifts LM to the right/down. ";
-      } else if (moneySupply < 100 || interestRate > 4) {
-        text += "Contractionary monetary policy shifts LM to the left/up. ";
-      } else {
-        text += "Monetary policy is neutral. ";
-      }
-    }
-
-    if (isLmEquilibrium.y > FE + 2) {
-      text += "Output is above full-employment output.";
-    } else if (isLmEquilibrium.y < FE - 2) {
-      text += "Output is below full-employment output.";
-    } else {
-      text += "Output is close to full-employment output.";
-    }
-
-    return text;
-  }, [
-    shockResult,
-    model,
-    policyType,
-    govSpending,
-    taxes,
-    moneySupply,
-    interestRate,
-    shockType,
-    shockStrength,
-    adAsEquilibrium,
-    adAsEffects.potentialOutput,
-    isLmEquilibrium,
-    FE,
-  ]);
-
+  // ── equilibrium coords ────────────────────────────────────────────────────
   const currentEq =
-    model === "AD-AS"
-      ? { x: adAsEquilibrium.y, y: adAsEquilibrium.p }
-      : { x: isLmEquilibrium.y, y: isLmEquilibrium.i };
+    model === "AD-AS" ? adAs.eq
+    : model === "IS-MP" ? isMp.eq
+    : isLm.eq;
 
   const currentEqX = scaleX(currentEq.x);
   const currentEqY = scaleY(currentEq.y);
 
-  const adPath = makePath(AD);
-  const srasPath = makePath(SRAS);
-  const isPath = makePath(IS);
-  const lmPath = makePath(LM);
+  const ghostEq =
+    model === "AD-AS" && ghostAdAs ? ghostAdAs.eq
+    : model === "IS-MP" && ghostIsMp ? ghostIsMp.eq
+    : model === "IS-LM" && ghostIsLm ? ghostIsLm.eq
+    : null;
 
-  const lrasX = scaleX(LRAS);
-  const feX = scaleX(FE);
+  const ghostEqX = ghostEq ? scaleX(ghostEq.x) : null;
+  const ghostEqY = ghostEq ? scaleY(ghostEq.y) : null;
+  const hasGhost = ghostEq !== null;
+
+  // ── interpretation ────────────────────────────────────────────────────────
+  const interpretation = useMemo(() => {
+    if (shockResult) return shockResult;
+    if (model === "AD-AS") {
+      let t = "";
+      if (shockType === "Supply") t += shockStrength >= 6 ? "Negative supply shock: SRAS shifts left. " : shockStrength > 0 ? "Mild negative supply shock. " : shockStrength <= -6 ? "Positive supply shock: SRAS shifts right. " : shockStrength < 0 ? "Mild positive supply shock. " : "";
+      else if (shockType === "Demand") t += shockStrength >= 6 ? "Positive demand shock: AD shifts right. " : shockStrength > 0 ? "Mild positive demand shock. " : shockStrength <= -6 ? "Negative demand shock: AD shifts left. " : shockStrength < 0 ? "Mild negative demand shock. " : "";
+      if (govSpending > 120 || taxes < 30 || moneySupply > 100 || interestRate < 4) t += "Demand conditions are expansionary. ";
+      else if (govSpending < 120 || taxes > 30 || moneySupply < 100 || interestRate > 4) t += "Demand conditions are contractionary. ";
+      if (shockType === "Supply" && shockStrength > 5 && adAs.eq.x < adAs.potentialOutput - 2) t += "Stagflation-like conditions present. ";
+      t += adAs.eq.x > adAs.potentialOutput + 2 ? "Output above potential — inflationary gap." : adAs.eq.x < adAs.potentialOutput - 2 ? "Output below potential — recessionary gap." : "Economy near long-run equilibrium.";
+      return t;
+    }
+    if (model === "IS-MP") {
+      let t = govSpending > 120 || taxes < 30 ? "Expansionary fiscal: IS shifts right. " : govSpending < 120 || taxes > 30 ? "Contractionary fiscal: IS shifts left. " : "Fiscal policy neutral. ";
+      const gap = isMp.eq.x - isMp.feOutput;
+      t += gap > 2 ? "Output above CB target — MP rule tightens." : gap < -2 ? "Output below CB target — MP rule eases." : "Economy at CB target output.";
+      return t;
+    }
+    let t = "";
+    if (policyType === "Fiscal") t += govSpending > 120 || taxes < 30 ? "Expansionary fiscal: IS shifts right. " : govSpending < 120 || taxes > 30 ? "Contractionary fiscal: IS shifts left. " : "Fiscal policy neutral. ";
+    if (policyType === "Monetary") t += moneySupply > 100 || interestRate < 4 ? "Expansionary monetary: LM shifts right. " : moneySupply < 100 || interestRate > 4 ? "Contractionary monetary: LM shifts left. " : "Monetary policy neutral. ";
+    t += isLm.eq.x > isLm.fullEmploymentOutput + 2 ? "Output above full-employment level." : isLm.eq.x < isLm.fullEmploymentOutput - 2 ? "Output below full-employment level." : "Output near full-employment level.";
+    return t;
+  }, [shockResult, model, policyType, govSpending, taxes, moneySupply, interestRate, shockType, shockStrength, adAs, isLm, isMp]);
+
+  const axisLabels = {
+    "AD-AS": { x: "Real Output (Y)", y: "Price Level (P)" },
+    "IS-LM": { x: "Income / Output (Y)", y: "Interest Rate (i)" },
+    "IS-MP": { x: "Output (Y)", y: "Real Interest Rate (r)" },
+  };
+  const { x: xLabel, y: yLabel } = axisLabels[model];
 
   return (
     <div className="page">
@@ -347,362 +213,271 @@ export default function App() {
       </header>
 
       <main className="layout">
+        {/* ── SIDEBAR ── */}
         <aside className="sidebar">
           <div className="card">
-            <h2>{policyType} Policy Controls</h2>
+            <h2>Policy Controls</h2>
 
+            {/* Shock search */}
             <div className="panel-section">
               <label className="field">
-                <span>Shock Search Engine</span>
+                <span>Shock / Scenario Search</span>
                 <input
                   type="text"
                   value={shockQuery}
                   onChange={(e) => setShockQuery(e.target.value)}
-                  placeholder="positive demand shock, negative supply shock, stagflation"
+                  onKeyDown={(e) => e.key === "Enter" && applyShockSearch()}
+                  placeholder="e.g. stagflation, expansionary fiscal…"
                 />
               </label>
-
               <div className="button-row">
-                <button onClick={applyShockSearch}>Apply Shock</button>
+                <button onClick={applyShockSearch}>Apply</button>
               </div>
             </div>
 
+            {/* Model selector */}
             <label className="field">
               <span>Model</span>
-              <select
-                value={model}
-                onChange={(e) => {
-                  clearShockResult();
-                  setModel(e.target.value);
-                }}
-              >
+              <select value={model} onChange={(e) => { clearShockResult(); setGhost(null); setModel(e.target.value); }}>
                 <option>IS-LM</option>
+                <option>IS-MP</option>
                 <option>AD-AS</option>
               </select>
             </label>
 
-            <div className="policy-switch">
-              <button
-                className={policyType === "Fiscal" ? "tab active" : "tab"}
-                onClick={() => {
-                  clearShockResult();
-                  setPolicyType("Fiscal");
-                  setModel("IS-LM");
-                }}
-              >
-                Fiscal Policy
-              </button>
-
-              <button
-                className={policyType === "Monetary" ? "tab active" : "tab"}
-                onClick={() => {
-                  clearShockResult();
-                  setPolicyType("Monetary");
-                  setModel("IS-LM");
-                }}
-              >
-                Monetary Policy
-              </button>
-            </div>
-
-            {policyType === "Fiscal" && (
-              <div className="panel-section">
-                <label className="field">
-                  <span>Government spending: {govSpending}</span>
-                  <input
-                    type="range"
-                    min="80"
-                    max="180"
-                    value={govSpending}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setGovSpending(Number(e.target.value));
-                    }}
-                  />
-                </label>
-
-                <label className="field">
-                  <span>Taxes: {taxes}%</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={taxes}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setTaxes(Number(e.target.value));
-                    }}
-                  />
-                </label>
-
-                <div className="button-row">
-                  <button onClick={applyExpansionaryFiscal}>Expansionary</button>
-                  <button onClick={applyContractionaryFiscal}>
-                    Contractionary
-                  </button>
-                </div>
+            {/* Policy tabs */}
+            {model !== "AD-AS" && (
+              <div className="policy-switch">
+                <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clearShockResult(); setPolicyType("Fiscal"); }}>Fiscal</button>
+                <button
+                  className={policyType === "Monetary" ? "tab active" : "tab"}
+                  onClick={() => { clearShockResult(); setPolicyType("Monetary"); setModel("IS-LM"); }}
+                  disabled={model === "IS-MP"}
+                  title={model === "IS-MP" ? "Monetary policy is controlled by the MP rule below" : ""}
+                >Monetary</button>
               </div>
             )}
 
-            {policyType === "Monetary" && (
+            {/* Fiscal controls — always shown */}
+            <div className="panel-section">
+              <label className="field">
+                <span>Government spending: {govSpending}</span>
+                <input type="range" min="80" max="180" value={govSpending}
+                  onChange={(e) => { captureGhost(model); clearShockResult(); setGovSpending(Number(e.target.value)); }} />
+              </label>
+              <label className="field">
+                <span>Taxes: {taxes}%</span>
+                <input type="range" min="0" max="100" value={taxes}
+                  onChange={(e) => { captureGhost(model); clearShockResult(); setTaxes(Number(e.target.value)); }} />
+              </label>
+              <div className="button-row">
+                <button onClick={applyExpansionaryFiscal}>Expansionary</button>
+                <button onClick={applyContractionaryFiscal}>Contractionary</button>
+              </div>
+            </div>
+
+            {/* Monetary — IS-LM only */}
+            {model === "IS-LM" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
                   <span>Money supply: {moneySupply}</span>
-                  <input
-                    type="range"
-                    min="60"
-                    max="160"
-                    value={moneySupply}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setMoneySupply(Number(e.target.value));
-                    }}
-                  />
+                  <input type="range" min="60" max="160" value={moneySupply}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setMoneySupply(Number(e.target.value)); }} />
                 </label>
-
                 <label className="field">
                   <span>Interest rate: {interestRate}%</span>
-                  <input
-                    type="range"
-                    min="-10"
-                    max="20"
-                    value={interestRate}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setInterestRate(Number(e.target.value));
-                    }}
-                  />
+                  <input type="range" min="-10" max="20" value={interestRate}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setInterestRate(Number(e.target.value)); }} />
                 </label>
-
                 <div className="button-row">
-                  <button onClick={applyExpansionaryMonetary}>
-                    Expansionary
-                  </button>
-                  <button onClick={applyContractionaryMonetary}>
-                    Contractionary
-                  </button>
+                  <button onClick={applyExpansionaryMonetary}>Expansionary</button>
+                  <button onClick={applyContractionaryMonetary}>Contractionary</button>
                 </div>
               </div>
             )}
 
+            {/* IS-MP specific */}
+            {model === "IS-MP" && (
+              <div className="panel-section">
+                <label className="field">
+                  <span>Natural rate r* = {naturalRate.toFixed(1)}%</span>
+                  <input type="range" min="0" max="8" step="0.1" value={naturalRate}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setNaturalRate(Number(e.target.value)); }} />
+                </label>
+                <label className="field">
+                  <span>MP rule slope λ = {mpSlope.toFixed(2)}</span>
+                  <input type="range" min="0.01" max="0.2" step="0.01" value={mpSlope}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setMpSlope(Number(e.target.value)); }} />
+                </label>
+                <label className="field">
+                  <span>CB output target shift: {outputGap > 0 ? "+" : ""}{outputGap}</span>
+                  <input type="range" min="-20" max="20" value={outputGap}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setOutputGap(Number(e.target.value)); }} />
+                </label>
+                <div className="info-hint">r = r* + λ·(Y − Y*)</div>
+              </div>
+            )}
+
+            {/* AD-AS specific */}
             {model === "AD-AS" && (
               <div className="panel-section">
                 <label className="field">
                   <span>Inflation: {inflation}%</span>
-                  <input
-                    type="range"
-                    min="-10"
-                    max="50"
-                    value={inflation}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setInflation(Number(e.target.value));
-                    }}
-                  />
+                  <input type="range" min="-10" max="50" value={inflation}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setInflation(Number(e.target.value)); }} />
                 </label>
-
+                <label className="field">
+                  <span>Money supply: {moneySupply}</span>
+                  <input type="range" min="60" max="160" value={moneySupply}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setMoneySupply(Number(e.target.value)); }} />
+                </label>
+                <label className="field">
+                  <span>Interest rate: {interestRate}%</span>
+                  <input type="range" min="-10" max="20" value={interestRate}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setInterestRate(Number(e.target.value)); }} />
+                </label>
                 <label className="field">
                   <span>Shock type</span>
-                  <select
-                    value={shockType}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setShockType(e.target.value);
-                    }}
-                  >
+                  <select value={shockType} onChange={(e) => { captureGhost(model); clearShockResult(); setShockType(e.target.value); }}>
                     <option>None</option>
                     <option>Demand</option>
                     <option>Supply</option>
                   </select>
                 </label>
-
                 <label className="field">
-                  <span>
-                    {shockType === "Demand"
-                      ? `Demand shock: ${shockStrength}`
-                      : shockType === "Supply"
-                      ? `Supply shock: ${shockStrength}`
-                      : `Shock intensity: ${shockStrength}`}
-                  </span>
-                  <input
-                    type="range"
-                    min="-10"
-                    max="10"
-                    value={shockStrength}
-                    onChange={(e) => {
-                      clearShockResult();
-                      setShockStrength(Number(e.target.value));
-                    }}
-                  />
+                  <span>{shockType !== "None" ? `${shockType} shock: ${shockStrength}` : `Shock intensity: ${shockStrength}`}</span>
+                  <input type="range" min="-10" max="10" value={shockStrength}
+                    onChange={(e) => { captureGhost(model); clearShockResult(); setShockStrength(Number(e.target.value)); }} />
                 </label>
               </div>
             )}
 
             <div className="button-row">
-              <button className="reset-btn" onClick={resetAll}>
-                Reset
-              </button>
+              <button className="reset-btn" onClick={resetAll}>Reset</button>
+              {hasGhost && <button className="clear-ghost-btn" onClick={() => setGhost(null)}>Clear E₁</button>}
             </div>
 
             <div className="info-box">
               <strong>Interpretation</strong>
               <p>{interpretation}</p>
-
-              {model === "AD-AS" ? (
-                <p>
-                  <strong>Equilibrium output:</strong>{" "}
-                  {adAsEquilibrium.y.toFixed(1)}
-                  <br />
-                  <strong>Price level:</strong> {adAsEquilibrium.p.toFixed(1)}
-                </p>
-              ) : (
-                <p>
-                  <strong>Equilibrium income:</strong>{" "}
-                  {isLmEquilibrium.y.toFixed(1)}
-                  <br />
-                  <strong>Interest rate:</strong>{" "}
-                  {isLmEquilibrium.i.toFixed(1)}
-                </p>
-              )}
+              {model === "AD-AS" && <p><strong>Eq. output:</strong> {adAs.eq.x.toFixed(1)}<br /><strong>Price level:</strong> {adAs.eq.y.toFixed(1)}</p>}
+              {model === "IS-LM" && <p><strong>Eq. income:</strong> {isLm.eq.x.toFixed(1)}<br /><strong>Interest rate:</strong> {isLm.eq.y.toFixed(1)}%</p>}
+              {model === "IS-MP" && <p><strong>Eq. output:</strong> {isMp.eq.x.toFixed(1)}<br /><strong>Real rate:</strong> {isMp.eq.y.toFixed(2)}%<br /><strong>CB target Y*:</strong> {isMp.feOutput.toFixed(1)}</p>}
             </div>
           </div>
         </aside>
 
+        {/* ── GRAPH ── */}
         <section className="graph-section">
           <div className="card graph-card">
             <h2>{model} Graph</h2>
 
             <svg viewBox={`0 0 ${width} ${height}`} className="graph-svg">
-              <line
-                x1={margin.left}
-                y1={height - margin.bottom}
-                x2={width - margin.right}
-                y2={height - margin.bottom}
-                stroke="#111827"
-                strokeWidth="2"
-              />
-              <line
-                x1={margin.left}
-                y1={height - margin.bottom}
-                x2={margin.left}
-                y2={margin.top}
-                stroke="#111827"
-                strokeWidth="2"
-              />
+              {/* Axes */}
+              <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="#111827" strokeWidth="2" />
+              <line x1={margin.left} y1={height - margin.bottom} x2={margin.left} y2={margin.top} stroke="#111827" strokeWidth="2" />
+              <text x={width / 2 - 55} y={height - 12} fontSize="15">{xLabel}</text>
+              <text x="14" y="24" fontSize="15">{yLabel}</text>
 
-              {model === "AD-AS" ? (
+              {/* ── AD-AS curves ── */}
+              {model === "AD-AS" && (
                 <>
-                  <text x={width / 2 - 40} y={height - 15} fontSize="16">
-                    Real Output (Y)
-                  </text>
-                  <text x="18" y="28" fontSize="16">
-                    Price Level (P)
-                  </text>
-                </>
-              ) : (
-                <>
-                  <text x={width / 2 - 55} y={height - 15} fontSize="16">
-                    Income / Output (Y)
-                  </text>
-                  <text x="18" y="28" fontSize="16">
-                    Interest Rate (i)
-                  </text>
+                  {ghostAdAs && (
+                    <>
+                      <path d={makePath(ghostAdAs.AD)}   fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(155)} y={scaleY(ghostAdAs.AD(155)) + 16}   fill="#93c5fd" fontSize="13">AD₁</text>
+                      <path d={makePath(ghostAdAs.SRAS)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(140)} y={scaleY(ghostAdAs.SRAS(140)) + 16} fill="#fca5a5" fontSize="13">SRAS₁</text>
+                    </>
+                  )}
+                  <path d={makePath(adAs.AD)}   fill="none" stroke="#2563eb" strokeWidth="3" />
+                  <text x={scaleX(155)} y={scaleY(adAs.AD(155)) - 8}   fill="#2563eb" fontSize="14">AD{hasGhost ? "₂" : ""}</text>
+                  <path d={makePath(adAs.SRAS)} fill="none" stroke="#dc2626" strokeWidth="3" />
+                  <text x={scaleX(140)} y={scaleY(adAs.SRAS(140)) - 8} fill="#dc2626" fontSize="14">SRAS{hasGhost ? "₂" : ""}</text>
+                  <line x1={scaleX(adAs.potentialOutput)} y1={margin.top} x2={scaleX(adAs.potentialOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
+                  <text x={scaleX(adAs.potentialOutput) + 6} y={margin.top + 18} fill="#16a34a" fontSize="14">LRAS</text>
                 </>
               )}
 
-              {model === "AD-AS" ? (
+              {/* ── IS-LM curves ── */}
+              {model === "IS-LM" && (
                 <>
-                  <path d={adPath} fill="none" stroke="#2563eb" strokeWidth="3" />
-                  <text x={scaleX(160)} y={scaleY(AD(160)) - 8} fill="#2563eb">
-                    AD
-                  </text>
-
-                  <path
-                    d={srasPath}
-                    fill="none"
-                    stroke="#dc2626"
-                    strokeWidth="3"
-                  />
-                  <text
-                    x={scaleX(145)}
-                    y={scaleY(SRAS(145)) - 8}
-                    fill="#dc2626"
-                  >
-                    SRAS
-                  </text>
-
-                  <line
-                    x1={lrasX}
-                    y1={margin.top}
-                    x2={lrasX}
-                    y2={height - margin.bottom}
-                    stroke="#16a34a"
-                    strokeWidth="3"
-                    strokeDasharray="8 6"
-                  />
-                  <text x={lrasX + 8} y={margin.top + 18} fill="#16a34a">
-                    LRAS
-                  </text>
-                </>
-              ) : (
-                <>
-                  <path d={isPath} fill="none" stroke="#2563eb" strokeWidth="3" />
-                  <text x={scaleX(160)} y={scaleY(IS(160)) - 8} fill="#2563eb">
-                    IS
-                  </text>
-
-                  <path d={lmPath} fill="none" stroke="#dc2626" strokeWidth="3" />
-                  <text x={scaleX(145)} y={scaleY(LM(145)) - 8} fill="#dc2626">
-                    LM
-                  </text>
-
-                  <line
-                    x1={feX}
-                    y1={margin.top}
-                    x2={feX}
-                    y2={height - margin.bottom}
-                    stroke="#16a34a"
-                    strokeWidth="3"
-                    strokeDasharray="8 6"
-                  />
-                  <text x={feX + 8} y={margin.top + 18} fill="#16a34a">
-                    FE
-                  </text>
+                  {ghostIsLm && (
+                    <>
+                      <path d={makePath(ghostIsLm.IS)} fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(155)} y={scaleY(ghostIsLm.IS(155)) + 16} fill="#93c5fd" fontSize="13">IS₁</text>
+                      <path d={makePath(ghostIsLm.LM)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(140)} y={scaleY(ghostIsLm.LM(140)) + 16} fill="#fca5a5" fontSize="13">LM₁</text>
+                    </>
+                  )}
+                  <path d={makePath(isLm.IS)} fill="none" stroke="#2563eb" strokeWidth="3" />
+                  <text x={scaleX(155)} y={scaleY(isLm.IS(155)) - 8} fill="#2563eb" fontSize="14">IS{hasGhost ? "₂" : ""}</text>
+                  <path d={makePath(isLm.LM)} fill="none" stroke="#dc2626" strokeWidth="3" />
+                  <text x={scaleX(140)} y={scaleY(isLm.LM(140)) - 8} fill="#dc2626" fontSize="14">LM{hasGhost ? "₂" : ""}</text>
+                  <line x1={scaleX(isLm.fullEmploymentOutput)} y1={margin.top} x2={scaleX(isLm.fullEmploymentOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
+                  <text x={scaleX(isLm.fullEmploymentOutput) + 6} y={margin.top + 18} fill="#16a34a" fontSize="14">FE</text>
                 </>
               )}
 
-              <line
-                x1={currentEqX}
-                y1={currentEqY}
-                x2={currentEqX}
-                y2={height - margin.bottom}
-                stroke="#6b7280"
-                strokeDasharray="5 5"
-              />
-              <line
-                x1={margin.left}
-                y1={currentEqY}
-                x2={currentEqX}
-                y2={currentEqY}
-                stroke="#6b7280"
-                strokeDasharray="5 5"
-              />
+              {/* ── IS-MP curves ── */}
+              {model === "IS-MP" && (
+                <>
+                  {ghostIsMp && (
+                    <>
+                      <path d={makePath(ghostIsMp.IS)} fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(150)} y={scaleY(ghostIsMp.IS(150)) + 16} fill="#93c5fd" fontSize="13">IS₁</text>
+                      <path d={makePath(ghostIsMp.MP)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
+                      <text x={scaleX(155)} y={scaleY(ghostIsMp.MP(155)) + 16} fill="#fca5a5" fontSize="13">MP₁</text>
+                    </>
+                  )}
+                  <path d={makePath(isMp.IS)} fill="none" stroke="#2563eb" strokeWidth="3" />
+                  <text x={scaleX(150)} y={scaleY(isMp.IS(150)) - 8} fill="#2563eb" fontSize="14">IS{hasGhost ? "₂" : ""}</text>
+                  <path d={makePath(isMp.MP)} fill="none" stroke="#dc2626" strokeWidth="3" />
+                  <text x={scaleX(155)} y={scaleY(isMp.MP(155)) - 8} fill="#dc2626" fontSize="14">MP{hasGhost ? "₂" : ""}</text>
+                  <line x1={margin.left} y1={scaleY(isMp.naturalRate)} x2={width - margin.right} y2={scaleY(isMp.naturalRate)} stroke="#9333ea" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.6" />
+                  <text x={margin.left + 4} y={scaleY(isMp.naturalRate) - 5} fill="#9333ea" fontSize="12">r*</text>
+                  <line x1={scaleX(isMp.feOutput)} y1={margin.top} x2={scaleX(isMp.feOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
+                  <text x={scaleX(isMp.feOutput) + 6} y={margin.top + 18} fill="#16a34a" fontSize="14">Y*</text>
+                </>
+              )}
 
-              <circle cx={currentEqX} cy={currentEqY} r="5" fill="#111827" />
-              <text x={currentEqX + 8} y={currentEqY - 8}>
-                E
-              </text>
+              {/* ── Ghost equilibrium E₁ ── */}
+              {hasGhost && (
+                <>
+                  <line x1={ghostEqX} y1={ghostEqY} x2={ghostEqX} y2={height - margin.bottom} stroke="#9ca3af" strokeDasharray="5 5" strokeWidth="1.2" />
+                  <line x1={margin.left} y1={ghostEqY} x2={ghostEqX} y2={ghostEqY} stroke="#9ca3af" strokeDasharray="5 5" strokeWidth="1.2" />
+                  <circle cx={ghostEqX} cy={ghostEqY} r="6" fill="white" stroke="#6b7280" strokeWidth="2" />
+                  <text x={ghostEqX + 9} y={ghostEqY - 8} fontSize="13" fill="#6b7280" fontWeight="600">E₁</text>
+                  <text x={ghostEqX - 14} y={height - margin.bottom + 20} fontSize="12" fill="#6b7280">{ghostEq.x.toFixed(0)}</text>
+                  <text x={margin.left - 44} y={ghostEqY + 5} fontSize="12" fill="#6b7280">{ghostEq.y.toFixed(1)}</text>
+                </>
+              )}
 
-              <text
-                x={currentEqX - 12}
-                y={height - margin.bottom + 20}
-                fontSize="14"
-              >
-                {currentEq.x.toFixed(0)}
-              </text>
-              <text x={margin.left - 42} y={currentEqY + 5} fontSize="14">
-                {currentEq.y.toFixed(0)}
-              </text>
+              {/* ── Arrow E₁ → E₂ ── */}
+              {hasGhost && (
+                <>
+                  <defs>
+                    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                      <polygon points="0 0, 8 3, 0 6" fill="#374151" />
+                    </marker>
+                  </defs>
+                  <line
+                    x1={ghostEqX} y1={ghostEqY}
+                    x2={currentEqX - (currentEqX > ghostEqX ? 10 : currentEqX < ghostEqX ? -10 : 0)}
+                    y2={currentEqY - (currentEqY > ghostEqY ? 10 : currentEqY < ghostEqY ? -10 : 0)}
+                    stroke="#374151" strokeWidth="1.8" strokeDasharray="4 3"
+                    markerEnd="url(#arrowhead)"
+                  />
+                </>
+              )}
+
+              {/* ── Current equilibrium E₂ (or E) ── */}
+              <line x1={currentEqX} y1={currentEqY} x2={currentEqX} y2={height - margin.bottom} stroke="#6b7280" strokeDasharray="5 5" />
+              <line x1={margin.left} y1={currentEqY} x2={currentEqX} y2={currentEqY} stroke="#6b7280" strokeDasharray="5 5" />
+              <circle cx={currentEqX} cy={currentEqY} r="6" fill="#111827" />
+              <text x={currentEqX + 9} y={currentEqY - 8} fontSize="14" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
+              <text x={currentEqX - 14} y={height - margin.bottom + 20} fontSize="13">{currentEq.x.toFixed(0)}</text>
+              <text x={margin.left - 44} y={currentEqY + 5} fontSize="13">{currentEq.y.toFixed(1)}</text>
             </svg>
           </div>
         </section>
@@ -710,3 +485,4 @@ export default function App() {
     </div>
   );
 }
+
