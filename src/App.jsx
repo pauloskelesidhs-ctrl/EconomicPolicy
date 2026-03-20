@@ -238,7 +238,7 @@ export default function App() {
             {/* Model selector */}
             <label className="field">
               <span>Model</span>
-              <select value={model} onChange={(e) => { clearShockResult(); setGhost(null); setModel(e.target.value); }}>
+              <select value={model} onChange={(e) => { clearShockResult(); setGhost(null); setModel(e.target.value); if (e.target.value === "IS-MP") setPolicyType("Monetary"); }}>
                 <option>IS-LM</option>
                 <option>IS-MP</option>
                 <option>AD-AS</option>
@@ -251,15 +251,13 @@ export default function App() {
                 <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clearShockResult(); setPolicyType("Fiscal"); }}>Fiscal</button>
                 <button
                   className={policyType === "Monetary" ? "tab active" : "tab"}
-                  onClick={() => { clearShockResult(); setPolicyType("Monetary"); setModel("IS-LM"); }}
-                  disabled={model === "IS-MP"}
-                  title={model === "IS-MP" ? "Monetary policy is controlled by the MP rule below" : ""}
+                  onClick={() => { clearShockResult(); setPolicyType("Monetary"); if (model !== "IS-MP") setModel("IS-LM"); }}
                 >Monetary</button>
               </div>
             )}
 
-            {/* Fiscal controls — always shown */}
-            <div className="panel-section">
+            {/* Fiscal controls — only when Fiscal tab is active */}
+            {policyType === "Fiscal" && <div className="panel-section">
               <label className="field">
                 <span>Government spending: {govSpending}</span>
                 <input type="range" min="80" max="180" value={govSpending}
@@ -274,9 +272,9 @@ export default function App() {
                 <button onClick={applyExpansionaryFiscal}>Expansionary</button>
                 <button onClick={applyContractionaryFiscal}>Contractionary</button>
               </div>
-            </div>
+            </div>}
 
-            {/* Monetary — IS-LM only */}
+            {/* Monetary — IS-LM only when Monetary tab active */}
             {model === "IS-LM" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
@@ -296,8 +294,8 @@ export default function App() {
               </div>
             )}
 
-            {/* IS-MP specific */}
-            {model === "IS-MP" && (
+            {/* IS-MP specific — only when Monetary tab is active */}
+            {model === "IS-MP" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
                   <span>Natural rate r* = {naturalRate.toFixed(1)}%</span>
@@ -373,6 +371,12 @@ export default function App() {
             <h2>{model} Graph</h2>
 
             <svg viewBox={`0 0 ${width} ${height}`} className="graph-svg">
+              <defs>
+                <marker id="arrowhead" markerWidth="9" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 9 3.5, 0 7" fill="#111827" />
+                </marker>
+              </defs>
+
               {/* Axes */}
               <line x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} stroke="#111827" strokeWidth="2" />
               <line x1={margin.left} y1={height - margin.bottom} x2={margin.left} y2={margin.top} stroke="#111827" strokeWidth="2" />
@@ -382,18 +386,21 @@ export default function App() {
               {/* ── AD-AS curves ── */}
               {model === "AD-AS" && (
                 <>
+                  {/* Ghost curves — same color, dashed, behind new curves */}
                   {ghostAdAs && (
                     <>
-                      <path d={makePath(ghostAdAs.AD)}   fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(155)} y={scaleY(ghostAdAs.AD(155)) + 16}   fill="#93c5fd" fontSize="13">AD₁</text>
-                      <path d={makePath(ghostAdAs.SRAS)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(140)} y={scaleY(ghostAdAs.SRAS(140)) + 16} fill="#fca5a5" fontSize="13">SRAS₁</text>
+                      <path d={makePath(ghostAdAs.AD)}   fill="none" stroke="#2563eb" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(155)} y={scaleY(ghostAdAs.AD(155)) + 16}   fill="#2563eb" fontSize="13" opacity="0.6">AD₁</text>
+                      <path d={makePath(ghostAdAs.SRAS)} fill="none" stroke="#dc2626" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(140)} y={scaleY(ghostAdAs.SRAS(140)) + 16} fill="#dc2626" fontSize="13" opacity="0.6">SRAS₁</text>
                     </>
                   )}
+                  {/* Current curves */}
                   <path d={makePath(adAs.AD)}   fill="none" stroke="#2563eb" strokeWidth="3" />
-                  <text x={scaleX(155)} y={scaleY(adAs.AD(155)) - 8}   fill="#2563eb" fontSize="14">AD{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(155)} y={scaleY(adAs.AD(155)) - 8}   fill="#2563eb" fontSize="14" fontWeight="700">AD{hasGhost ? "₂" : ""}</text>
                   <path d={makePath(adAs.SRAS)} fill="none" stroke="#dc2626" strokeWidth="3" />
-                  <text x={scaleX(140)} y={scaleY(adAs.SRAS(140)) - 8} fill="#dc2626" fontSize="14">SRAS{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(140)} y={scaleY(adAs.SRAS(140)) - 8} fill="#dc2626" fontSize="14" fontWeight="700">SRAS{hasGhost ? "₂" : ""}</text>
+                  {/* LRAS */}
                   <line x1={scaleX(adAs.potentialOutput)} y1={margin.top} x2={scaleX(adAs.potentialOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
                   <text x={scaleX(adAs.potentialOutput) + 6} y={margin.top + 18} fill="#16a34a" fontSize="14">LRAS</text>
                 </>
@@ -404,16 +411,16 @@ export default function App() {
                 <>
                   {ghostIsLm && (
                     <>
-                      <path d={makePath(ghostIsLm.IS)} fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(155)} y={scaleY(ghostIsLm.IS(155)) + 16} fill="#93c5fd" fontSize="13">IS₁</text>
-                      <path d={makePath(ghostIsLm.LM)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(140)} y={scaleY(ghostIsLm.LM(140)) + 16} fill="#fca5a5" fontSize="13">LM₁</text>
+                      <path d={makePath(ghostIsLm.IS)} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(155)} y={scaleY(ghostIsLm.IS(155)) + 16} fill="#2563eb" fontSize="13" opacity="0.6">IS₁</text>
+                      <path d={makePath(ghostIsLm.LM)} fill="none" stroke="#dc2626" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(140)} y={scaleY(ghostIsLm.LM(140)) + 16} fill="#dc2626" fontSize="13" opacity="0.6">LM₁</text>
                     </>
                   )}
                   <path d={makePath(isLm.IS)} fill="none" stroke="#2563eb" strokeWidth="3" />
-                  <text x={scaleX(155)} y={scaleY(isLm.IS(155)) - 8} fill="#2563eb" fontSize="14">IS{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(155)} y={scaleY(isLm.IS(155)) - 8} fill="#2563eb" fontSize="14" fontWeight="700">IS{hasGhost ? "₂" : ""}</text>
                   <path d={makePath(isLm.LM)} fill="none" stroke="#dc2626" strokeWidth="3" />
-                  <text x={scaleX(140)} y={scaleY(isLm.LM(140)) - 8} fill="#dc2626" fontSize="14">LM{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(140)} y={scaleY(isLm.LM(140)) - 8} fill="#dc2626" fontSize="14" fontWeight="700">LM{hasGhost ? "₂" : ""}</text>
                   <line x1={scaleX(isLm.fullEmploymentOutput)} y1={margin.top} x2={scaleX(isLm.fullEmploymentOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
                   <text x={scaleX(isLm.fullEmploymentOutput) + 6} y={margin.top + 18} fill="#16a34a" fontSize="14">FE</text>
                 </>
@@ -424,16 +431,16 @@ export default function App() {
                 <>
                   {ghostIsMp && (
                     <>
-                      <path d={makePath(ghostIsMp.IS)} fill="none" stroke="#93c5fd" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(150)} y={scaleY(ghostIsMp.IS(150)) + 16} fill="#93c5fd" fontSize="13">IS₁</text>
-                      <path d={makePath(ghostIsMp.MP)} fill="none" stroke="#fca5a5" strokeWidth="2" strokeDasharray="7 4" />
-                      <text x={scaleX(155)} y={scaleY(ghostIsMp.MP(155)) + 16} fill="#fca5a5" fontSize="13">MP₁</text>
+                      <path d={makePath(ghostIsMp.IS)} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(150)} y={scaleY(ghostIsMp.IS(150)) + 16} fill="#2563eb" fontSize="13" opacity="0.6">IS₁</text>
+                      <path d={makePath(ghostIsMp.MP)} fill="none" stroke="#dc2626" strokeWidth="2.5" strokeDasharray="8 5" opacity="0.45" />
+                      <text x={scaleX(155)} y={scaleY(ghostIsMp.MP(155)) + 16} fill="#dc2626" fontSize="13" opacity="0.6">MP₁</text>
                     </>
                   )}
                   <path d={makePath(isMp.IS)} fill="none" stroke="#2563eb" strokeWidth="3" />
-                  <text x={scaleX(150)} y={scaleY(isMp.IS(150)) - 8} fill="#2563eb" fontSize="14">IS{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(150)} y={scaleY(isMp.IS(150)) - 8} fill="#2563eb" fontSize="14" fontWeight="700">IS{hasGhost ? "₂" : ""}</text>
                   <path d={makePath(isMp.MP)} fill="none" stroke="#dc2626" strokeWidth="3" />
-                  <text x={scaleX(155)} y={scaleY(isMp.MP(155)) - 8} fill="#dc2626" fontSize="14">MP{hasGhost ? "₂" : ""}</text>
+                  <text x={scaleX(155)} y={scaleY(isMp.MP(155)) - 8} fill="#dc2626" fontSize="14" fontWeight="700">MP{hasGhost ? "₂" : ""}</text>
                   <line x1={margin.left} y1={scaleY(isMp.naturalRate)} x2={width - margin.right} y2={scaleY(isMp.naturalRate)} stroke="#9333ea" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.6" />
                   <text x={margin.left + 4} y={scaleY(isMp.naturalRate) - 5} fill="#9333ea" fontSize="12">r*</text>
                   <line x1={scaleX(isMp.feOutput)} y1={margin.top} x2={scaleX(isMp.feOutput)} y2={height - margin.bottom} stroke="#16a34a" strokeWidth="3" strokeDasharray="8 6" />
@@ -441,43 +448,52 @@ export default function App() {
                 </>
               )}
 
-              {/* ── Ghost equilibrium E₁ ── */}
+              {/* ── E₁ crosshairs + dot (both go all the way to both axes) ── */}
               {hasGhost && (
                 <>
-                  <line x1={ghostEqX} y1={ghostEqY} x2={ghostEqX} y2={height - margin.bottom} stroke="#9ca3af" strokeDasharray="5 5" strokeWidth="1.2" />
-                  <line x1={margin.left} y1={ghostEqY} x2={ghostEqX} y2={ghostEqY} stroke="#9ca3af" strokeDasharray="5 5" strokeWidth="1.2" />
-                  <circle cx={ghostEqX} cy={ghostEqY} r="6" fill="white" stroke="#6b7280" strokeWidth="2" />
-                  <text x={ghostEqX + 9} y={ghostEqY - 8} fontSize="13" fill="#6b7280" fontWeight="600">E₁</text>
-                  <text x={ghostEqX - 14} y={height - margin.bottom + 20} fontSize="12" fill="#6b7280">{ghostEq.x.toFixed(0)}</text>
-                  <text x={margin.left - 44} y={ghostEqY + 5} fontSize="12" fill="#6b7280">{ghostEq.y.toFixed(1)}</text>
+                  {/* vertical: E₁ down to x-axis */}
+                  <line x1={ghostEqX} y1={ghostEqY} x2={ghostEqX} y2={height - margin.bottom} stroke="#111827" strokeDasharray="6 4" strokeWidth="1.5" />
+                  {/* horizontal: E₁ left to y-axis */}
+                  <line x1={margin.left} y1={ghostEqY} x2={ghostEqX} y2={ghostEqY} stroke="#111827" strokeDasharray="6 4" strokeWidth="1.5" />
+                  {/* dot */}
+                  <circle cx={ghostEqX} cy={ghostEqY} r="6" fill="#111827" />
+                  {/* label */}
+                  <text x={ghostEqX - 20} y={ghostEqY - 10} fontSize="13" fill="#111827" fontWeight="700">E₁</text>
+                  {/* axis tick values */}
+                  <text x={ghostEqX - 10} y={height - margin.bottom + 20} fontSize="12" fill="#111827">{ghostEq.x.toFixed(0)}</text>
+                  <text x={margin.left - 42} y={ghostEqY + 5} fontSize="12" fill="#111827">{ghostEq.y.toFixed(1)}</text>
                 </>
               )}
 
               {/* ── Arrow E₁ → E₂ ── */}
-              {hasGhost && (
-                <>
-                  <defs>
-                    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-                      <polygon points="0 0, 8 3, 0 6" fill="#374151" />
-                    </marker>
-                  </defs>
+              {hasGhost && (() => {
+                const dx = currentEqX - ghostEqX;
+                const dy = currentEqY - ghostEqY;
+                const len = Math.sqrt(dx * dx + dy * dy) || 1;
+                const ux = dx / len; const uy = dy / len;
+                const gap = 10;
+                return (
                   <line
-                    x1={ghostEqX} y1={ghostEqY}
-                    x2={currentEqX - (currentEqX > ghostEqX ? 10 : currentEqX < ghostEqX ? -10 : 0)}
-                    y2={currentEqY - (currentEqY > ghostEqY ? 10 : currentEqY < ghostEqY ? -10 : 0)}
-                    stroke="#374151" strokeWidth="1.8" strokeDasharray="4 3"
+                    x1={ghostEqX + ux * gap} y1={ghostEqY + uy * gap}
+                    x2={currentEqX - ux * gap} y2={currentEqY - uy * gap}
+                    stroke="#111827" strokeWidth="2" strokeDasharray="5 3"
                     markerEnd="url(#arrowhead)"
                   />
-                </>
-              )}
+                );
+              })()}
 
-              {/* ── Current equilibrium E₂ (or E) ── */}
-              <line x1={currentEqX} y1={currentEqY} x2={currentEqX} y2={height - margin.bottom} stroke="#6b7280" strokeDasharray="5 5" />
-              <line x1={margin.left} y1={currentEqY} x2={currentEqX} y2={currentEqY} stroke="#6b7280" strokeDasharray="5 5" />
+              {/* ── E₂ (or E) crosshairs + dot ── */}
+              {/* vertical: down to x-axis */}
+              <line x1={currentEqX} y1={currentEqY} x2={currentEqX} y2={height - margin.bottom} stroke="#111827" strokeDasharray="6 4" strokeWidth="1.5" />
+              {/* horizontal: left to y-axis */}
+              <line x1={margin.left} y1={currentEqY} x2={currentEqX} y2={currentEqY} stroke="#111827" strokeDasharray="6 4" strokeWidth="1.5" />
+              {/* dot */}
               <circle cx={currentEqX} cy={currentEqY} r="6" fill="#111827" />
-              <text x={currentEqX + 9} y={currentEqY - 8} fontSize="14" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
-              <text x={currentEqX - 14} y={height - margin.bottom + 20} fontSize="13">{currentEq.x.toFixed(0)}</text>
-              <text x={margin.left - 44} y={currentEqY + 5} fontSize="13">{currentEq.y.toFixed(1)}</text>
+              {/* label */}
+              <text x={currentEqX + 9} y={currentEqY - 10} fontSize="14" fill="#111827" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
+              {/* axis tick values */}
+              <text x={currentEqX - 10} y={height - margin.bottom + 20} fontSize="13" fill="#111827">{currentEq.x.toFixed(0)}</text>
+              <text x={margin.left - 42} y={currentEqY + 5} fontSize="13" fill="#111827">{currentEq.y.toFixed(1)}</text>
             </svg>
           </div>
         </section>
@@ -485,4 +501,5 @@ export default function App() {
     </div>
   );
 }
+
 
