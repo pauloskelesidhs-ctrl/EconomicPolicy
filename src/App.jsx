@@ -5,7 +5,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export default function App() {
   const [model, setModel] = useState("IS-LM");
   const [policyType, setPolicyType] = useState("Fiscal");
-  const [govSpending, setGovSpending] = useState(120);
+  const [govSpending, setGovSpending] = useState(2000);
   const [taxes, setTaxes] = useState(30);
   const [moneySupply, setMoneySupply] = useState(100);
   const [interestRate, setInterestRate] = useState(4);
@@ -43,7 +43,7 @@ export default function App() {
 
   // ── Model builders ────────────────────────────────────────────────────────
   function buildAdAs(p) {
-    const adShift = (p.govSpending - 120) * 0.7 - (p.taxes - 30) * 0.6
+    const adShift = (p.govSpending - 2000) * 0.0156 - (p.taxes - 30) * 0.6
       + (p.moneySupply - 100) * 0.5 - (p.interestRate - 4) * 4
       + (p.shockType === "Demand" ? p.shockStrength * 8 : 0);
     const srasShift = (p.shockType === "Supply" ? p.shockStrength * 12 : 0) + p.inflation * 1.3;
@@ -54,7 +54,7 @@ export default function App() {
   }
 
   function buildIsLm(p) {
-    const isShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
+    const isShift = (p.govSpending - 2000) * 0.00111 - (p.taxes - 30) * 0.04;
     const lmShift = (p.moneySupply - 100) * 0.05 - (p.interestRate - 4) * 0.6;
     const IS  = (y) => 18 - 0.07 * y + isShift;
     const LM  = (y) => -2 + 0.09 * y - lmShift;
@@ -63,7 +63,7 @@ export default function App() {
   }
 
   function buildIsMp(p) {
-    const isShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
+    const isShift = (p.govSpending - 2000) * 0.00111 - (p.taxes - 30) * 0.04;
     const feOut   = 110 + p.outputGap * 2;
     const IS  = (y) => 12 - 0.06 * y + isShift;
     const MP  = (y) => p.naturalRate + p.mpSlope * (y - feOut);
@@ -108,8 +108,8 @@ export default function App() {
     "positive supply shock":   () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(-6); setInflation(1); setShockResult("Positive supply shock: SRAS shifts right → higher output, lower prices."); }),
     "negative supply shock":   () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(6);  setInflation(6); setShockResult("Negative supply shock: SRAS shifts left → lower output, higher prices."); }),
     "stagflation":             () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(8);  setInflation(8); setShockResult("Stagflation: severe negative supply shock → output ↓, prices ↑."); }),
-    "expansionary fiscal":     () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(150); setTaxes(20);   setShockResult("Expansionary fiscal: IS shifts right → higher income & interest rate."); }),
-    "contractionary fiscal":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(95);  setTaxes(45);   setShockResult("Contractionary fiscal: IS shifts left → lower income & interest rate."); }),
+    "expansionary fiscal":     () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(3500); setTaxes(20);   setShockResult("Expansionary fiscal: IS shifts right → higher income & interest rate."); }),
+    "contractionary fiscal":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(1000);  setTaxes(45);   setShockResult("Contractionary fiscal: IS shifts left → lower income & interest rate."); }),
     "expansionary monetary":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: LM shifts right → higher income, lower rate."); }),
     "contractionary monetary": () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
   };
@@ -120,14 +120,14 @@ export default function App() {
     if (p) p(); else alert("Try: " + Object.keys(PRESETS).join(", "));
   };
 
-  const applyExpFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(150); setTaxes(20); });
-  const applyConFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(95);  setTaxes(45); });
+  const applyExpFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(3500); setTaxes(20); });
+  const applyConFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(1000);  setTaxes(45); });
   const applyExpMon      = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(130); setInterestRate(2); });
   const applyConMon      = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(80);  setInterestRate(7); });
 
   const resetAll = () => {
     setModel("IS-LM"); setPolicyType("Fiscal");
-    setGovSpending(120); setTaxes(30); setMoneySupply(100); setInterestRate(4);
+    setGovSpending(2000); setTaxes(30); setMoneySupply(100); setInterestRate(4);
     setInflation(4); setShockType("None"); setShockStrength(0);
     setShockQuery(""); setShockResult("");
     setNaturalRate(2); setMpSlope(0.05); setOutputGap(0);
@@ -224,8 +224,8 @@ export default function App() {
             {policyType === "Fiscal" && (
               <div className="panel-section">
                 <label className="field">
-                  <span>Government spending: {govSpending}</span>
-                  <input type="range" min="80" max="180" value={govSpending}
+                  <span>General Government Spending (billion): {govSpending.toLocaleString()}</span>
+                  <input type="range" min="100" max="5000" step="50" value={govSpending}
                     onPointerDown={() => onDown(model)} onPointerUp={onUp}
                     onChange={(e) => { clear(); setGovSpending(+e.target.value); }} />
                 </label>
