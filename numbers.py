@@ -1,7 +1,7 @@
 def numbers(x, y, z):
     x = x / 2
     y = y / 2
-    z = z / 2
+    z = x * y
     return x, y, z
 
 print("All numbers divided by two")
