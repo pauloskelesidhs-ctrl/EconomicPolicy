@@ -60,71 +60,12 @@ body {
   border-color: #6366f1;
 }
 
-/* ── Range slider — no CSS variables, works on all browsers ── */
+/* ── Slider — accent-color is the only reliable cross-browser approach ── */
 .field input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
   width: 100%;
   height: 6px;
-  background: #3f3f46;
-  border-radius: 99px;
-  outline: none;
+  accent-color: #6366f1;
   cursor: pointer;
-  margin-top: 4px;
-}
-
-/* Webkit thumb */
-.field input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid #6366f1;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3);
-  cursor: pointer;
-  transition: box-shadow 0.15s, transform 0.15s;
-}
-.field input[type="range"]::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 0 7px rgba(99, 102, 241, 0.4);
-  transform: scale(1.1);
-}
-.field input[type="range"]::-webkit-slider-thumb:active {
-  box-shadow: 0 0 0 9px rgba(99, 102, 241, 0.45);
-  transform: scale(1.15);
-}
-
-/* Firefox thumb */
-.field input[type="range"]::-moz-range-thumb {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid #6366f1;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.3);
-  cursor: pointer;
-}
-.field input[type="range"]::-moz-range-track {
-  height: 6px;
-  background: #3f3f46;
-  border-radius: 99px;
-}
-
-/* IE/Edge thumb */
-.field input[type="range"]::-ms-thumb {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid #6366f1;
-  cursor: pointer;
-}
-.field input[type="range"]::-ms-track {
-  height: 6px;
-  background: #3f3f46;
-  border-color: transparent;
-  color: transparent;
 }
 
 .policy-switch { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -188,14 +129,11 @@ body {
 }
 
 .graph-card { min-height: 580px; }
-.graph-svg {
-  width: 100%;
-  display: block;
-  background: #111;
-  border-radius: 8px;
-}
+.graph-svg { width: 100%; display: block; background: #111; border-radius: 8px; }
 
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; }
   .graph-card { min-height: auto; }
 }
+
+
