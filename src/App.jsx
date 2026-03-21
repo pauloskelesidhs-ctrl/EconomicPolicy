@@ -214,12 +214,11 @@ export default function App() {
               </select>
             </label>
 
-            {model !== "AD-AS" && (
-              <div className="policy-switch">
-                <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Fiscal"); }}>Fiscal</button>
-                <button className={policyType === "Monetary" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Monetary"); if (model !== "IS-MP") setModel("IS-LM"); }}>Monetary</button>
-              </div>
-            )}
+            {/* Policy tabs — all models */}
+            <div className="policy-switch">
+              <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Fiscal"); }}>Fiscal</button>
+              <button className={policyType === "Monetary" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Monetary"); if (model === "IS-LM" || model === "AD-AS") {} if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); }}>Monetary</button>
+            </div>
 
             {policyType === "Fiscal" && (
               <div className="panel-section">
@@ -242,6 +241,7 @@ export default function App() {
               </div>
             )}
 
+            {/* Monetary — IS-LM */}
             {model === "IS-LM" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
@@ -263,6 +263,7 @@ export default function App() {
               </div>
             )}
 
+            {/* Monetary — IS-MP */}
             {model === "IS-MP" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
@@ -287,14 +288,9 @@ export default function App() {
               </div>
             )}
 
-            {model === "AD-AS" && (
+            {/* Monetary — AD-AS */}
+            {model === "AD-AS" && policyType === "Monetary" && (
               <div className="panel-section">
-                <label className="field">
-                  <span>Inflation: {inflation}%</span>
-                  <input type="range" min="-10" max="50" value={inflation}
-                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
-                    onChange={(e) => { clear(); setInflation(+e.target.value); }} />
-                </label>
                 <label className="field">
                   <span>Money supply: {moneySupply}</span>
                   <input type="range" min="60" max="160" value={moneySupply}
@@ -306,6 +302,22 @@ export default function App() {
                   <input type="range" min="-10" max="20" value={interestRate}
                     onPointerDown={() => onDown(model)} onPointerUp={onUp}
                     onChange={(e) => { clear(); setInterestRate(+e.target.value); }} />
+                </label>
+                <div className="button-row">
+                  <button onClick={() => applyPreset(model, () => { setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: AD shifts right → higher output & prices."); })}>Expansionary</button>
+                  <button onClick={() => applyPreset(model, () => { setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: AD shifts left → lower output & prices."); })}>Contractionary</button>
+                </div>
+              </div>
+            )}
+
+            {/* AD-AS shock controls — always shown in AD-AS */}
+            {model === "AD-AS" && (
+              <div className="panel-section">
+                <label className="field">
+                  <span>Inflation: {inflation}%</span>
+                  <input type="range" min="-10" max="50" value={inflation}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setInflation(+e.target.value); }} />
                 </label>
                 <label className="field">
                   <span>Shock type</span>
@@ -441,6 +453,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
