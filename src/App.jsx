@@ -72,9 +72,9 @@ export default function App() {
   }
 
   const cp = { govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength, mpSlope, naturalRate, outputGap };
-  const adAs = useMemo(() => buildAdAs(cp), [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
-  const isLm = useMemo(() => buildIsLm(cp), [govSpending, taxes, moneySupply, interestRate]);
-  const isMp = useMemo(() => buildIsMp(cp), [govSpending, taxes, mpSlope, naturalRate, outputGap]);
+  const adAs  = useMemo(() => buildAdAs(cp),  [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
+  const isLm  = useMemo(() => buildIsLm(cp),  [govSpending, taxes, moneySupply, interestRate]);
+  const isMp  = useMemo(() => buildIsMp(cp),  [govSpending, taxes, mpSlope, naturalRate, outputGap]);
   const gAdAs = useMemo(() => ghost && ghost.model === "AD-AS" ? buildAdAs(ghost) : null, [ghost]);
   const gIsLm = useMemo(() => ghost && ghost.model === "IS-LM" ? buildIsLm(ghost) : null, [ghost]);
   const gIsMp = useMemo(() => ghost && ghost.model === "IS-MP" ? buildIsMp(ghost) : null, [ghost]);
@@ -129,7 +129,7 @@ export default function App() {
   };
 
   // ── Equilibria ────────────────────────────────────────────────────────────
-  const curEq  = model === "AD-AS" ? adAs.eq : model === "IS-MP" ? isMp.eq : isLm.eq;
+  const curEq = model === "AD-AS" ? adAs.eq : model === "IS-MP" ? isMp.eq : isLm.eq;
   const cx = sx(curEq.x), cy = sy(curEq.y);
 
   const ghostEq = model === "AD-AS" && gAdAs ? gAdAs.eq
@@ -164,28 +164,16 @@ export default function App() {
     return t;
   }, [shockResult, model, policyType, govSpending, taxes, moneySupply, interestRate, shockType, shockStrength, adAs, isLm, isMp]);
 
-  const axisLabels = { "AD-AS": { x: "Real Output (Y)", y: "Price Level (P)" }, "IS-LM": { x: "Income / Output (Y)", y: "Interest Rate (i)" }, "IS-MP": { x: "Output (Y)", y: "Real Interest Rate (r)" } };
+  const axisLabels = {
+    "AD-AS": { x: "Real Output (Y)", y: "Price Level (P)" },
+    "IS-LM": { x: "Income / Output (Y)", y: "Interest Rate (i)" },
+    "IS-MP": { x: "Output (Y)", y: "Real Interest Rate (r)" },
+  };
   const { x: xLabel, y: yLabel } = axisLabels[model];
 
-  // ── Slider helper ─────────────────────────────────────────────────────────
-  const pct = (v, mn, mx) => ((v - mn) / (mx - mn) * 100).toFixed(1) + "%";
-  const Slider = ({ label, value, min, max, step = 1, onChange }) => (
-    <label className="field">
-      <span>{label}</span>
-      <input
-        type="range" min={min} max={max} step={step} value={value}
-        style={{ "--pct": pct(value, min, max) }}
-        onPointerDown={() => onDown(model)}
-        onPointerUp={onUp}
-        onChange={(e) => { clear(); onChange(+e.target.value); }}
-      />
-    </label>
-  );
-
-  // ── Change-path arrows (textbook style) ───────────────────────────────────
-  const xBot = H - mg.bottom;
-  const xArrowY = xBot + 22;   // horizontal arrow row below x-axis
-  const yArrowX = mg.left - 22; // vertical arrow col left of y-axis
+  const xBot    = H - mg.bottom;
+  const xArrowY = xBot + 22;
+  const yArrowX = mg.left - 22;
 
   return (
     <div className="page">
@@ -197,6 +185,7 @@ export default function App() {
           <div className="card">
             <h2>Policy Controls</h2>
 
+            {/* Search */}
             <div className="panel-section">
               <label className="field">
                 <span>Shock / Scenario Search</span>
@@ -210,15 +199,21 @@ export default function App() {
               </div>
             </div>
 
+            {/* Model */}
             <label className="field">
               <span>Model</span>
-              <select value={model} onChange={(e) => { clear(); setGhost(null); dragging.current = false; setModel(e.target.value); if (e.target.value === "IS-MP") setPolicyType("Monetary"); }}>
+              <select value={model} onChange={(e) => {
+                clear(); setGhost(null); dragging.current = false;
+                setModel(e.target.value);
+                if (e.target.value === "IS-MP") setPolicyType("Monetary");
+              }}>
                 <option>IS-LM</option>
                 <option>IS-MP</option>
                 <option>AD-AS</option>
               </select>
             </label>
 
+            {/* Policy tabs */}
             {model !== "AD-AS" && (
               <div className="policy-switch">
                 <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Fiscal"); }}>Fiscal</button>
@@ -226,10 +221,21 @@ export default function App() {
               </div>
             )}
 
+            {/* Fiscal */}
             {policyType === "Fiscal" && (
               <div className="panel-section">
-                <Slider label={`Government spending: ${govSpending}`} value={govSpending} min={80} max={180} onChange={setGovSpending} />
-                <Slider label={`Taxes: ${taxes}%`} value={taxes} min={0} max={100} onChange={setTaxes} />
+                <label className="field">
+                  <span>Government spending: {govSpending}</span>
+                  <input type="range" min="80" max="180" value={govSpending}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setGovSpending(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>Taxes: {taxes}%</span>
+                  <input type="range" min="0" max="100" value={taxes}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setTaxes(+e.target.value); }} />
+                </label>
                 <div className="button-row">
                   <button onClick={applyExpFiscal}>Expansionary</button>
                   <button onClick={applyConFiscal}>Contractionary</button>
@@ -237,10 +243,21 @@ export default function App() {
               </div>
             )}
 
+            {/* Monetary IS-LM */}
             {model === "IS-LM" && policyType === "Monetary" && (
               <div className="panel-section">
-                <Slider label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={setMoneySupply} />
-                <Slider label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={setInterestRate} />
+                <label className="field">
+                  <span>Money supply: {moneySupply}</span>
+                  <input type="range" min="60" max="160" value={moneySupply}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setMoneySupply(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>Interest rate: {interestRate}%</span>
+                  <input type="range" min="-10" max="20" value={interestRate}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setInterestRate(+e.target.value); }} />
+                </label>
                 <div className="button-row">
                   <button onClick={applyExpMon}>Expansionary</button>
                   <button onClick={applyConMon}>Contractionary</button>
@@ -248,27 +265,64 @@ export default function App() {
               </div>
             )}
 
+            {/* IS-MP */}
             {model === "IS-MP" && policyType === "Monetary" && (
               <div className="panel-section">
-                <Slider label={`Natural rate r* = ${naturalRate.toFixed(1)}%`} value={naturalRate} min={0} max={8} step={0.1} onChange={setNaturalRate} />
-                <Slider label={`MP slope λ = ${mpSlope.toFixed(2)}`} value={mpSlope} min={0.01} max={0.2} step={0.01} onChange={setMpSlope} />
-                <Slider label={`CB target shift: ${outputGap > 0 ? "+" : ""}${outputGap}`} value={outputGap} min={-20} max={20} onChange={setOutputGap} />
+                <label className="field">
+                  <span>Natural rate r* = {naturalRate.toFixed(1)}%</span>
+                  <input type="range" min="0" max="8" step="0.1" value={naturalRate}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setNaturalRate(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>MP slope λ = {mpSlope.toFixed(2)}</span>
+                  <input type="range" min="0.01" max="0.2" step="0.01" value={mpSlope}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setMpSlope(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>CB target shift: {outputGap > 0 ? "+" : ""}{outputGap}</span>
+                  <input type="range" min="-20" max="20" value={outputGap}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setOutputGap(+e.target.value); }} />
+                </label>
                 <div className="info-hint">r = r* + λ·(Y − Y*)</div>
               </div>
             )}
 
+            {/* AD-AS */}
             {model === "AD-AS" && (
               <div className="panel-section">
-                <Slider label={`Inflation: ${inflation}%`} value={inflation} min={-10} max={50} onChange={setInflation} />
-                <Slider label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={setMoneySupply} />
-                <Slider label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={setInterestRate} />
+                <label className="field">
+                  <span>Inflation: {inflation}%</span>
+                  <input type="range" min="-10" max="50" value={inflation}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setInflation(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>Money supply: {moneySupply}</span>
+                  <input type="range" min="60" max="160" value={moneySupply}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setMoneySupply(+e.target.value); }} />
+                </label>
+                <label className="field">
+                  <span>Interest rate: {interestRate}%</span>
+                  <input type="range" min="-10" max="20" value={interestRate}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setInterestRate(+e.target.value); }} />
+                </label>
                 <label className="field">
                   <span>Shock type</span>
                   <select value={shockType} onChange={(e) => { onDown(model); clear(); setShockType(e.target.value); }}>
                     <option>None</option><option>Demand</option><option>Supply</option>
                   </select>
                 </label>
-                <Slider label={`${shockType !== "None" ? shockType + " shock" : "Shock intensity"}: ${shockStrength}`} value={shockStrength} min={-10} max={10} onChange={setShockStrength} />
+                <label className="field">
+                  <span>{shockType !== "None" ? `${shockType} shock: ${shockStrength}` : `Shock intensity: ${shockStrength}`}</span>
+                  <input type="range" min="-10" max="10" value={shockStrength}
+                    onPointerDown={() => onDown(model)} onPointerUp={onUp}
+                    onChange={(e) => { clear(); setShockStrength(+e.target.value); }} />
+                </label>
               </div>
             )}
 
@@ -299,33 +353,38 @@ export default function App() {
               </defs>
 
               {/* Grid */}
-              {[25,50,75,100,125,150,175].map(x => <line key={"gx"+x} x1={sx(x)} y1={mg.top} x2={sx(x)} y2={H-mg.bottom} stroke="#27272a" strokeWidth="1" />)}
-              {[0.25,0.5,0.75].map(t => { const yv = yMin+(yMax-yMin)*t; return <line key={"gy"+t} x1={mg.left} y1={sy(yv)} x2={W-mg.right} y2={sy(yv)} stroke="#27272a" strokeWidth="1" />; })}
+              {[25,50,75,100,125,150,175].map(x => (
+                <line key={"gx"+x} x1={sx(x)} y1={mg.top} x2={sx(x)} y2={H-mg.bottom} stroke="#27272a" strokeWidth="1" />
+              ))}
+              {[0.25,0.5,0.75].map(t => {
+                const yv = yMin + (yMax - yMin) * t;
+                return <line key={"gy"+t} x1={mg.left} y1={sy(yv)} x2={W-mg.right} y2={sy(yv)} stroke="#27272a" strokeWidth="1" />;
+              })}
 
               {/* Axes */}
               <line x1={mg.left} y1={H-mg.bottom} x2={W-mg.right} y2={H-mg.bottom} stroke="#52525b" strokeWidth="2" />
-              <line x1={mg.left} y1={H-mg.bottom} x2={mg.left} y2={mg.top} stroke="#52525b" strokeWidth="2" />
-              <text x={W/2-55} y={H-8} fontSize="13" fill="#a1a1aa">{xLabel}</text>
-              <text x="10" y="22" fontSize="13" fill="#a1a1aa">{yLabel}</text>
+              <line x1={mg.left} y1={H-mg.bottom} x2={mg.left}     y2={mg.top}      stroke="#52525b" strokeWidth="2" />
+              <text x={W/2-55} y={H-8}  fontSize="13" fill="#a1a1aa">{xLabel}</text>
+              <text x="10"      y="22"   fontSize="13" fill="#a1a1aa">{yLabel}</text>
 
-              {/* ── Ghost curves (faded) ── */}
+              {/* ── Ghost curves — SOLID, full opacity ── */}
               {model === "AD-AS" && gAdAs && <>
-                <path d={makePath(gAdAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2" opacity="0.25" />
-                <text x={sx(155)} y={sy(gAdAs.AD(155))+14}   fill="#818cf8" fontSize="11" opacity="0.5">AD</text>
-                <path d={makePath(gAdAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2" opacity="0.25" />
-                <text x={sx(138)} y={sy(gAdAs.SRAS(138))+14} fill="#f87171" fontSize="11" opacity="0.5">SRAS</text>
+                <path d={makePath(gAdAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                <text x={sx(155)} y={sy(gAdAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">AD</text>
+                <path d={makePath(gAdAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                <text x={sx(138)} y={sy(gAdAs.SRAS(138))-8} fill="#f87171" fontSize="13" fontWeight="700">SRAS</text>
               </>}
               {model === "IS-LM" && gIsLm && <>
-                <path d={makePath(gIsLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2" opacity="0.25" />
-                <text x={sx(155)} y={sy(gIsLm.IS(155))+14} fill="#818cf8" fontSize="11" opacity="0.5">IS</text>
-                <path d={makePath(gIsLm.LM)} fill="none" stroke="#f87171" strokeWidth="2" opacity="0.25" />
-                <text x={sx(140)} y={sy(gIsLm.LM(140))+14} fill="#f87171" fontSize="11" opacity="0.5">LM</text>
+                <path d={makePath(gIsLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                <text x={sx(155)} y={sy(gIsLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
+                <path d={makePath(gIsLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                <text x={sx(140)} y={sy(gIsLm.LM(140))-8} fill="#f87171" fontSize="13" fontWeight="700">LM</text>
               </>}
               {model === "IS-MP" && gIsMp && <>
-                <path d={makePath(gIsMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2" opacity="0.25" />
-                <text x={sx(150)} y={sy(gIsMp.IS(150))+14} fill="#818cf8" fontSize="11" opacity="0.5">IS</text>
-                <path d={makePath(gIsMp.MP)} fill="none" stroke="#f87171" strokeWidth="2" opacity="0.25" />
-                <text x={sx(155)} y={sy(gIsMp.MP(155))+14} fill="#f87171" fontSize="11" opacity="0.5">MP</text>
+                <path d={makePath(gIsMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                <text x={sx(150)} y={sy(gIsMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
+                <path d={makePath(gIsMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                <text x={sx(155)} y={sy(gIsMp.MP(155))-8} fill="#f87171" fontSize="13" fontWeight="700">MP</text>
               </>}
 
               {/* ── Current curves ── */}
@@ -356,50 +415,45 @@ export default function App() {
                 <text x={sx(isMp.feOut)+5} y={mg.top+16} fill="#34d399" fontSize="12">Y*</text>
               </>}
 
-              {/* ── Change-path arrows (textbook style) ── */}
+              {/* ── Change-path arrows ── */}
               {hasGhost && (() => {
                 const xDir = curEq.x > ghostEq.x ? 1 : -1;
                 const yDir = curEq.y > ghostEq.y ? 1 : -1;
                 return (
                   <>
-                    {/* Ghost vertical drop */}
-                    <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" />
-                    {/* New vertical drop */}
-                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" />
-                    {/* Ghost horizontal to y-axis */}
-                    <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" />
-                    {/* New horizontal to y-axis */}
-                    <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.7" />
-
-                    {/* Horizontal arrow on x-axis: output change */}
+                    {/* Drop lines from both equilibria */}
+                    <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+                    {/* Horizontal lines to y-axis */}
+                    <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+                    <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+                    {/* Horizontal arrow on x-axis */}
                     <line
-                      x1={gx + (xDir > 0 ? 4 : -4)} y1={xArrowY}
-                      x2={cx - (xDir > 0 ? 8 : -8)} y2={xArrowY}
+                      x1={gx + (xDir > 0 ? 5 : -5)} y1={xArrowY}
+                      x2={cx - (xDir > 0 ? 9 : -9)} y2={xArrowY}
                       stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={gx} y={xArrowY + 14} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(0)}</text>
-                    <text x={cx} y={xArrowY + 14} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(0)}</text>
-
-                    {/* Vertical arrow on y-axis: rate/price change */}
+                    <text x={gx}  y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(0)}</text>
+                    <text x={cx}  y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(0)}</text>
+                    {/* Vertical arrow on y-axis */}
                     <line
-                      x1={yArrowX} y1={gy + (yDir > 0 ? 4 : -4)}
-                      x2={yArrowX} y2={cy - (yDir > 0 ? 8 : -8)}
+                      x1={yArrowX} y1={gy + (yDir > 0 ? 5 : -5)}
+                      x2={yArrowX} y2={cy - (yDir > 0 ? 9 : -9)}
                       stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={yArrowX - 4} y={gy + 4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(1)}</text>
-                    <text x={yArrowX - 4} y={cy + 4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(1)}</text>
-
-                    {/* E1 — open circle */}
-                    <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" opacity="0.85" />
-                    <text x={gx - 14} y={gy - 10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
+                    <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(1)}</text>
+                    <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(1)}</text>
+                    {/* E1 open circle */}
+                    <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
+                    <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
                   </>
                 );
               })()}
 
               {/* ── Current equilibrium dot ── */}
               <circle cx={cx} cy={cy} r="7" fill="#f1f5f9" />
-              <text x={cx + 10} y={cy - 10} fontSize="13" fill="#f1f5f9" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
+              <text x={cx+10} y={cy-10} fontSize="13" fill="#f1f5f9" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
               {!hasGhost && <>
-                <text x={cx} y={xBot + 18} fontSize="12" fill="#a1a1aa" textAnchor="middle">{curEq.x.toFixed(0)}</text>
-                <text x={mg.left - 8} y={cy + 4} fontSize="12" fill="#a1a1aa" textAnchor="end">{curEq.y.toFixed(1)}</text>
+                <text x={cx}        y={xBot+18} fontSize="12" fill="#a1a1aa" textAnchor="middle">{curEq.x.toFixed(0)}</text>
+                <text x={mg.left-8} y={cy+4}    fontSize="12" fill="#a1a1aa" textAnchor="end">{curEq.y.toFixed(1)}</text>
               </>}
             </svg>
           </div>
@@ -408,6 +462,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
