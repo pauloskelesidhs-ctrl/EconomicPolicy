@@ -47,37 +47,43 @@ export default function App() {
       + (p.moneySupply - 100) * 0.5 - (p.interestRate - 4) * 4
       + (p.shockType === "Demand" ? p.shockStrength * 8 : 0);
     const srasShift = (p.shockType === "Supply" ? p.shockStrength * 12 : 0) + p.inflation * 1.3;
-    const AD = (y) => 170 - 0.7 * y + adShift;
-    const SRAS = (y) => 30 + 0.6 * y + srasShift;
-    const eqY = (170 + adShift - 30 - srasShift) / 1.3;
+    const AD   = (y) => 170 - 0.7 * y + adShift;
+    const SRAS = (y) => 30  + 0.6 * y + srasShift;
+    const eqY  = (170 + adShift - 30 - srasShift) / 1.3;
     return { AD, SRAS, po: 110, eq: { x: clamp(eqY, 0, 200), y: clamp(AD(eqY), 0, 200) } };
   }
 
   function buildIsLm(p) {
     const isShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
     const lmShift = (p.moneySupply - 100) * 0.05 - (p.interestRate - 4) * 0.6;
-    const IS = (y) => 18 - 0.07 * y + isShift;
-    const LM = (y) => -2 + 0.09 * y - lmShift;
+    const IS  = (y) => 18 - 0.07 * y + isShift;
+    const LM  = (y) => -2 + 0.09 * y - lmShift;
     const eqY = (20 + isShift + lmShift) / 0.16;
     return { IS, LM, fe: 110, eq: { x: clamp(eqY, 0, 200), y: clamp(IS(eqY), -10, 20) } };
   }
 
   function buildIsMp(p) {
     const isShift = (p.govSpending - 120) * 0.05 - (p.taxes - 30) * 0.04;
-    const feOut = 110 + p.outputGap * 2;
-    const IS = (y) => 12 - 0.06 * y + isShift;
-    const MP = (y) => p.naturalRate + p.mpSlope * (y - feOut);
+    const feOut   = 110 + p.outputGap * 2;
+    const IS  = (y) => 12 - 0.06 * y + isShift;
+    const MP  = (y) => p.naturalRate + p.mpSlope * (y - feOut);
     const eqY = (12 + isShift - p.naturalRate + p.mpSlope * feOut) / (0.06 + p.mpSlope);
     return { IS, MP, feOut, nr: p.naturalRate, eq: { x: clamp(eqY, 0, 200), y: clamp(IS(eqY), -2, 14) } };
   }
 
-  const cp = { govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength, mpSlope, naturalRate, outputGap };
-  const adAs  = useMemo(() => buildAdAs(cp),  [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
-  const isLm  = useMemo(() => buildIsLm(cp),  [govSpending, taxes, moneySupply, interestRate]);
-  const isMp  = useMemo(() => buildIsMp(cp),  [govSpending, taxes, mpSlope, naturalRate, outputGap]);
-  const gAdAs = useMemo(() => ghost && ghost.model === "AD-AS" ? buildAdAs(ghost) : null, [ghost]);
-  const gIsLm = useMemo(() => ghost && ghost.model === "IS-LM" ? buildIsLm(ghost) : null, [ghost]);
-  const gIsMp = useMemo(() => ghost && ghost.model === "IS-MP" ? buildIsMp(ghost) : null, [ghost]);
+  const cp    = { govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength, mpSlope, naturalRate, outputGap };
+  const adAs  = useMemo(() => buildAdAs(cp), [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
+  const isLm  = useMemo(() => buildIsLm(cp), [govSpending, taxes, moneySupply, interestRate]);
+  const isMp  = useMemo(() => buildIsMp(cp), [govSpending, taxes, mpSlope, naturalRate, outputGap]);
+
+  // Ghost equilibrium only — no ghost curves drawn
+  const ghostEqOnly = useMemo(() => {
+    if (!ghost) return null;
+    if (ghost.model === "AD-AS") return buildAdAs(ghost).eq;
+    if (ghost.model === "IS-LM") return buildIsLm(ghost).eq;
+    if (ghost.model === "IS-MP") return buildIsMp(ghost).eq;
+    return null;
+  }, [ghost]);
 
   const makePath = (fn) => {
     let d = "";
@@ -132,10 +138,7 @@ export default function App() {
   const curEq = model === "AD-AS" ? adAs.eq : model === "IS-MP" ? isMp.eq : isLm.eq;
   const cx = sx(curEq.x), cy = sy(curEq.y);
 
-  const ghostEq = model === "AD-AS" && gAdAs ? gAdAs.eq
-                : model === "IS-MP" && gIsMp ? gIsMp.eq
-                : model === "IS-LM" && gIsLm ? gIsLm.eq
-                : null;
+  const ghostEq = ghostEqOnly && model === (ghost ? ghost.model : null) ? ghostEqOnly : null;
   const gx = ghostEq ? sx(ghostEq.x) : null;
   const gy = ghostEq ? sy(ghostEq.y) : null;
   const hasGhost = ghostEq !== null
@@ -185,7 +188,6 @@ export default function App() {
           <div className="card">
             <h2>Policy Controls</h2>
 
-            {/* Search */}
             <div className="panel-section">
               <label className="field">
                 <span>Shock / Scenario Search</span>
@@ -199,7 +201,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Model */}
             <label className="field">
               <span>Model</span>
               <select value={model} onChange={(e) => {
@@ -213,7 +214,6 @@ export default function App() {
               </select>
             </label>
 
-            {/* Policy tabs */}
             {model !== "AD-AS" && (
               <div className="policy-switch">
                 <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Fiscal"); }}>Fiscal</button>
@@ -221,7 +221,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Fiscal */}
             {policyType === "Fiscal" && (
               <div className="panel-section">
                 <label className="field">
@@ -243,7 +242,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Monetary IS-LM */}
             {model === "IS-LM" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
@@ -265,7 +263,6 @@ export default function App() {
               </div>
             )}
 
-            {/* IS-MP */}
             {model === "IS-MP" && policyType === "Monetary" && (
               <div className="panel-section">
                 <label className="field">
@@ -290,7 +287,6 @@ export default function App() {
               </div>
             )}
 
-            {/* AD-AS */}
             {model === "AD-AS" && (
               <div className="panel-section">
                 <label className="field">
@@ -367,73 +363,55 @@ export default function App() {
               <text x={W/2-55} y={H-8}  fontSize="13" fill="#a1a1aa">{xLabel}</text>
               <text x="10"      y="22"   fontSize="13" fill="#a1a1aa">{yLabel}</text>
 
-              {/* ── Ghost curves — SOLID, full opacity ── */}
-              {model === "AD-AS" && gAdAs && <>
-                <path d={makePath(gAdAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(gAdAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">AD</text>
-                <path d={makePath(gAdAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(138)} y={sy(gAdAs.SRAS(138))-8} fill="#f87171" fontSize="13" fontWeight="700">SRAS</text>
-              </>}
-              {model === "IS-LM" && gIsLm && <>
-                <path d={makePath(gIsLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(gIsLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
-                <path d={makePath(gIsLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(140)} y={sy(gIsLm.LM(140))-8} fill="#f87171" fontSize="13" fontWeight="700">LM</text>
-              </>}
-              {model === "IS-MP" && gIsMp && <>
-                <path d={makePath(gIsMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(150)} y={sy(gIsMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
-                <path d={makePath(gIsMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(gIsMp.MP(155))-8} fill="#f87171" fontSize="13" fontWeight="700">MP</text>
-              </>}
-
-              {/* ── Current curves ── */}
+              {/* ── Curves (no ghost curves drawn at all) ── */}
               {model === "AD-AS" && <>
                 <path d={makePath(adAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(adAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">{hasGhost ? "AD'" : "AD"}</text>
+                <text x={sx(155)} y={sy(adAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">AD</text>
                 <path d={makePath(adAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(138)} y={sy(adAs.SRAS(138))-8} fill="#f87171" fontSize="13" fontWeight="700">{hasGhost ? "SRAS'" : "SRAS"}</text>
+                <text x={sx(138)} y={sy(adAs.SRAS(138))-8} fill="#f87171" fontSize="13" fontWeight="700">SRAS</text>
                 <line x1={sx(adAs.po)} y1={mg.top} x2={sx(adAs.po)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(adAs.po)+5} y={mg.top+16} fill="#34d399" fontSize="12">LRAS</text>
               </>}
               {model === "IS-LM" && <>
                 <path d={makePath(isLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(isLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">{hasGhost ? "IS'" : "IS"}</text>
+                <text x={sx(155)} y={sy(isLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
                 <path d={makePath(isLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(140)} y={sy(isLm.LM(140))-8} fill="#f87171" fontSize="13" fontWeight="700">{hasGhost ? "LM'" : "LM"}</text>
+                <text x={sx(140)} y={sy(isLm.LM(140))-8} fill="#f87171" fontSize="13" fontWeight="700">LM</text>
                 <line x1={sx(isLm.fe)} y1={mg.top} x2={sx(isLm.fe)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(isLm.fe)+5} y={mg.top+16} fill="#34d399" fontSize="12">FE</text>
               </>}
               {model === "IS-MP" && <>
                 <path d={makePath(isMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(150)} y={sy(isMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">{hasGhost ? "IS'" : "IS"}</text>
+                <text x={sx(150)} y={sy(isMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
                 <path d={makePath(isMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(isMp.MP(155))-8} fill="#f87171" fontSize="13" fontWeight="700">{hasGhost ? "MP'" : "MP"}</text>
+                <text x={sx(155)} y={sy(isMp.MP(155))-8} fill="#f87171" fontSize="13" fontWeight="700">MP</text>
                 <line x1={mg.left} y1={sy(isMp.nr)} x2={W-mg.right} y2={sy(isMp.nr)} stroke="#c084fc" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.7" />
                 <text x={mg.left+4} y={sy(isMp.nr)-5} fill="#c084fc" fontSize="11">r*</text>
                 <line x1={sx(isMp.feOut)} y1={mg.top} x2={sx(isMp.feOut)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(isMp.feOut)+5} y={mg.top+16} fill="#34d399" fontSize="12">Y*</text>
               </>}
 
-              {/* ── Change-path arrows ── */}
+              {/* ── Change-path arrows only (no ghost curves) ── */}
               {hasGhost && (() => {
                 const xDir = curEq.x > ghostEq.x ? 1 : -1;
                 const yDir = curEq.y > ghostEq.y ? 1 : -1;
                 return (
                   <>
-                    {/* Drop lines from both equilibria */}
+                    {/* Drop lines from E₁ */}
                     <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    {/* Horizontal lines to y-axis */}
                     <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+                    {/* Drop lines from E₂ */}
+                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
                     <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+
                     {/* Horizontal arrow on x-axis */}
                     <line
                       x1={gx + (xDir > 0 ? 5 : -5)} y1={xArrowY}
                       x2={cx - (xDir > 0 ? 9 : -9)} y2={xArrowY}
                       stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={gx}  y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(0)}</text>
-                    <text x={cx}  y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(0)}</text>
+                    <text x={gx} y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(0)}</text>
+                    <text x={cx} y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(0)}</text>
+
                     {/* Vertical arrow on y-axis */}
                     <line
                       x1={yArrowX} y1={gy + (yDir > 0 ? 5 : -5)}
@@ -441,14 +419,15 @@ export default function App() {
                       stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
                     <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(1)}</text>
                     <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(1)}</text>
-                    {/* E1 open circle */}
+
+                    {/* E₁ open circle */}
                     <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
                     <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
                   </>
                 );
               })()}
 
-              {/* ── Current equilibrium dot ── */}
+              {/* ── Current equilibrium ── */}
               <circle cx={cx} cy={cy} r="7" fill="#f1f5f9" />
               <text x={cx+10} y={cy-10} fontSize="13" fill="#f1f5f9" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
               {!hasGhost && <>
@@ -462,6 +441,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
