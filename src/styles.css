@@ -60,7 +60,39 @@ body {
   border-color: #6366f1;
 }
 
-/* ── Slider — accent-color is the only reliable cross-browser approach ── */
+/* ── Slider row: range + number input side by side ── */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.slider-row input[type="range"] {
+  flex: 1;
+  height: 6px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+.slider-row input[type="number"] {
+  width: 68px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #f1f5f9;
+  font-size: 12px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.slider-row input[type="number"]::-webkit-inner-spin-button,
+.slider-row input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.slider-row input[type="number"]:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+/* legacy standalone range */
 .field input[type="range"] {
   width: 100%;
   height: 6px;
