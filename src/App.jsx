@@ -74,8 +74,8 @@ export default function App() {
   const iH = H - mg.top - mg.bottom;
 
   const ALPHA = 0.35;
-  const SOLOW_KMAX = 120;
-  const SOLOW_YMAX = 60;
+  const SOLOW_KMAX = 60;
+  const SOLOW_YMAX = 35;
 
   const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14], "Solow": [0, SOLOW_YMAX] };
   const [yMin, yMax] = yRanges[model] ?? [-10, 20];
@@ -180,7 +180,7 @@ export default function App() {
     "contractionary monetary": () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
     "higher savings rate":     () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); }),
     "lower savings rate":      () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); }),
-    "capital destruction":     () => applyPreset("Solow", () => { setModel("Solow"); setCapitalShock(-20); setShockResult("Capital destruction: k falls below k* → economy converges back to steady state."); }),
+    "capital destruction":     () => applyPreset("Solow", () => { setModel("Solow"); setCapitalShock(-12); setShockResult("Capital destruction: k falls below k* → economy converges back to steady state."); }),
   };
 
   const applySearch = () => {
@@ -407,14 +407,14 @@ export default function App() {
                 <SliderField label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`} value={depreciation} min={0.01} max={0.2} step={0.005} dec={3} onChange={(v) => { clear(); setDepreciation(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <SliderField label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`} value={techGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setTechGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-40} max={40} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-20} max={20} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <div className="button-row">
                   <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); })}>↑ Savings</button>
                   <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); })}>↓ Savings</button>
                 </div>
                 <div className="button-row">
-                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(-25); setShockResult("Capital destruction: k falls below k* → economy converges back up."); })}>Capital ↓</button>
-                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(+25); setShockResult("Capital windfall: k rises above k* → economy converges back down."); })}>Capital ↑</button>
+                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(-12); setShockResult("Capital destruction: k falls below k* → economy converges back up."); })}>Capital ↓</button>
+                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(+12); setShockResult("Capital windfall: k rises above k* → economy converges back down."); })}>Capital ↑</button>
                 </div>
               </div>
             )}
@@ -506,11 +506,11 @@ export default function App() {
               {/* ── Solow ── */}
               {model === "Solow" && <>
                 <path d={makePath(solow.prodFn, SOLOW_KMAX)} fill="none" stroke="#fbbf24" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.82)} y={sy(solow.prodFn(SOLOW_KMAX*0.82))-9} fill="#fbbf24" fontSize="13" fontWeight="700">y = kᵅ</text>
+                <text x={sx(SOLOW_KMAX*0.72)} y={sy(solow.prodFn(SOLOW_KMAX*0.82))-9} fill="#fbbf24" fontSize="13" fontWeight="700">y = kᵅ</text>
                 <path d={makePath(solow.investFn, SOLOW_KMAX)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.75)} y={sy(solow.investFn(SOLOW_KMAX*0.75))-9} fill="#818cf8" fontSize="13" fontWeight="700">s·f(k)</text>
+                <text x={sx(SOLOW_KMAX*0.70)} y={sy(solow.investFn(SOLOW_KMAX*0.75))-9} fill="#818cf8" fontSize="13" fontWeight="700">s·f(k)</text>
                 <path d={makePath(solow.breakEven, SOLOW_KMAX)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.78)} y={sy(solow.breakEven(SOLOW_KMAX*0.78))+16} fill="#f87171" fontSize="13" fontWeight="700">(δ+n+g)k</text>
+                <text x={sx(SOLOW_KMAX*0.72)} y={sy(solow.breakEven(SOLOW_KMAX*0.78))+16} fill="#f87171" fontSize="13" fontWeight="700">(δ+n+g)k</text>
                 <line x1={sx(solow.kStar)} y1={mg.top} x2={sx(solow.kStar)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(solow.kStar)+5} y={mg.top+16} fill="#34d399" fontSize="12">k*</text>
                 {capitalShock !== 0 && <>
