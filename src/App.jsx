@@ -74,15 +74,10 @@ export default function App() {
   const iH = H - mg.top - mg.bottom;
 
   const ALPHA = 0.35;
-  const SOLOW_KMAX = 60;
-  const SOLOW_YMAX = 35;
 
-  const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14], "Solow": [0, SOLOW_YMAX] };
-  const [yMin, yMax] = yRanges[model] ?? [-10, 20];
-  const xMax = model === "Solow" ? SOLOW_KMAX : 200;
 
-  const sx = (x) => mg.left + (x / xMax) * iW;
-  const sy = (y) => H - mg.bottom - ((y - yMin) / (yMax - yMin)) * iH;
+
+
 
   // ── Model builders ────────────────────────────────────────────────────────
   function buildAdAs(p) {
@@ -120,15 +115,15 @@ export default function App() {
     const kStar = breakEvenRate > 0 ? Math.pow(s / breakEvenRate, 1 / (1 - ALPHA)) : 80;
     const yStar = Math.pow(Math.max(kStar, 0.01), ALPHA);
     const iStar = s * yStar;
-    const kCurrent = clamp(kStar + shock, 1, SOLOW_KMAX - 2);
+    const kCurrent = clamp(kStar + shock, 0.5, kStar * 4);
     const prodFn   = (k) => Math.pow(Math.max(k, 0.01), ALPHA);
     const investFn = (k) => s * Math.pow(Math.max(k, 0.01), ALPHA);
     const breakEven = (k) => breakEvenRate * k;
     return {
       prodFn, investFn, breakEven,
-      kStar: clamp(kStar, 1, SOLOW_KMAX),
-      yStar: clamp(yStar, 0, SOLOW_YMAX),
-      iStar: clamp(iStar, 0, SOLOW_YMAX),
+      kStar: clamp(kStar, 0.5, 9999),
+      yStar: clamp(yStar, 0, 9999),
+      iStar: clamp(iStar, 0, 9999),
       kCurrent, yCurrent: prodFn(kCurrent),
       iCurrent: investFn(kCurrent), breakEvenRate,
     };
@@ -139,6 +134,16 @@ export default function App() {
   const isLm  = useMemo(() => buildIsLm(cp),  [govSpending, taxes, moneySupply, interestRate]);
   const isMp  = useMemo(() => buildIsMp(cp),  [govSpending, taxes, mpSlope, naturalRate, outputGap]);
   const solow = useMemo(() => buildSolow(cp), [savingsRate, depreciation, popGrowth, techGrowth, capitalShock]);
+
+  // Dynamic axes — computed after solow so we can use solow.kStar
+  const SOLOW_KMAX = Math.max(solow.kStar * 2.5, 10);
+  const SOLOW_YMAX = Math.max(solow.prodFn(SOLOW_KMAX) * 1.15, 5);
+
+  const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14] };
+  const [yMin, yMax] = model === "Solow" ? [0, SOLOW_YMAX] : (yRanges[model] ?? [-10, 20]);
+  const xMax = model === "Solow" ? SOLOW_KMAX : 200;
+  const sx = (x) => mg.left + (x / xMax) * iW;
+  const sy = (y) => H - mg.bottom - ((y - yMin) / (yMax - yMin)) * iH;
 
   const ghostEqOnly = useMemo(() => {
     if (!ghost) return null;
@@ -378,7 +383,7 @@ export default function App() {
                   <div className="panel-section">
                     <SliderField label={`Natural rate r* = ${naturalRate.toFixed(1)}%`} value={naturalRate} min={0} max={8} step={0.1} dec={1} onChange={(v) => { clear(); setNaturalRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <SliderField label={`MP slope λ = ${mpSlope.toFixed(2)}`} value={mpSlope} min={0.01} max={0.2} step={0.01} dec={2} onChange={(v) => { clear(); setMpSlope(v); }} onDown={() => onDown(model)} onUp={onUp} />
-                    <SliderField label={`CB target shift: ${outputGap > 0 ? "+" : ""}${outputGap}`} value={outputGap} min={-20} max={20} onChange={(v) => { clear(); setOutputGap(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`CB target shift: ${outputGap > 0 ? "+" : ""}${outputGap}`} value={outputGap} min={-30} max={30} onChange={(v) => { clear(); setOutputGap(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="info-hint">r = r* + λ·(Y − Y*)</div>
                   </div>
                 )}
@@ -404,10 +409,10 @@ export default function App() {
               <div className="panel-section">
                 <div className="info-hint" style={{ marginBottom: "12px" }}>y = k^α &nbsp;(α = {ALPHA}) &nbsp;|&nbsp; steady state: s·f(k) = (δ+n+g)·k</div>
                 <SliderField label={`Savings rate s = ${(savingsRate * 100).toFixed(0)}%`} value={savingsRate} min={0.01} max={0.99} step={0.01} dec={2} onChange={(v) => { clear(); setSavingsRate(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`} value={depreciation} min={0.01} max={0.2} step={0.005} dec={3} onChange={(v) => { clear(); setDepreciation(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`} value={techGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setTechGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-20} max={20} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`} value={depreciation} min={0.01} max={0.5} step={0.005} dec={3} onChange={(v) => { clear(); setDepreciation(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={0} max={0.15} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`} value={techGrowth} min={0} max={0.15} step={0.001} dec={3} onChange={(v) => { clear(); setTechGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-30} max={30} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <div className="button-row">
                   <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); })}>↑ Savings</button>
                   <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); })}>↓ Savings</button>
@@ -540,6 +545,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
