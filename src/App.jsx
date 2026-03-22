@@ -2,34 +2,36 @@ import React, { useMemo, useState, useRef } from "react";
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// ── Reusable slider + number input ───────────────────────────────────────────
-function SliderField({ label, value, min, max, step=1, onChange, onDown, onUp, dec=0 }) {
-  const handleNum = (e) => {
-    const v = parseFloat(e.target.value);
-    if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
-  };
+// ── Slider + number input ─────────────────────────────────────────────────────
+function SliderField({ label, value, min, max, step = 1, dec = 0, onChange, onDown, onUp }) {
   return (
     <label className="field">
       <span>{label}</span>
       <div className="slider-row">
-        <input type="range" min={min} max={max} step={step} value={value}
+        <input
+          type="range" min={min} max={max} step={step} value={value}
           onPointerDown={onDown} onPointerUp={onUp}
-          onChange={(e) => onChange(+e.target.value)} />
-        <input type="number" min={min} max={max} step={step}
+          onChange={(e) => onChange(+e.target.value)}
+        />
+        <input
+          type="number" min={min} max={max} step={step}
           value={dec > 0 ? parseFloat(value).toFixed(dec) : Math.round(value)}
           onPointerDown={onDown}
-          onChange={handleNum} />
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (!isNaN(v)) onChange(clamp(v, min, max));
+          }}
+        />
       </div>
     </label>
   );
 }
 
-
 export default function App() {
+  // ── State ──────────────────────────────────────────────────────────────────
   const [model, setModel] = useState("IS-LM");
   const [policyType, setPolicyType] = useState("Fiscal");
 
-  // IS-LM / AD-AS / IS-MP state
   const [govSpending, setGovSpending] = useState(2000);
   const [taxes, setTaxes] = useState(30);
   const [moneySupply, setMoneySupply] = useState(100);
@@ -41,12 +43,12 @@ export default function App() {
   const [naturalRate, setNaturalRate] = useState(2);
   const [outputGap, setOutputGap] = useState(0);
 
-  // Solow state
-  const [savingsRate, setSavingsRate] = useState(0.3);       // s
-  const [depreciation, setDepreciation] = useState(0.05);   // δ
-  const [popGrowth, setPopGrowth] = useState(0.01);          // n
-  const [techGrowth, setTechGrowth] = useState(0.02);        // g
-  const [capitalShock, setCapitalShock] = useState(0);       // Δk shock
+  // Solow
+  const [savingsRate, setSavingsRate] = useState(0.30);
+  const [depreciation, setDepreciation] = useState(0.05);
+  const [popGrowth, setPopGrowth] = useState(0.01);
+  const [techGrowth, setTechGrowth] = useState(0.02);
+  const [capitalShock, setCapitalShock] = useState(0);
 
   const [shockQuery, setShockQuery] = useState("");
   const [shockResult, setShockResult] = useState("");
@@ -71,14 +73,15 @@ export default function App() {
   const iW = W - mg.left - mg.right;
   const iH = H - mg.top - mg.bottom;
 
-  // Solow uses its own axis range
+  const ALPHA = 0.35;
   const SOLOW_KMAX = 120;
   const SOLOW_YMAX = 60;
 
-  const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14] };
-  const [yMin, yMax] = model === "Solow" ? [0, SOLOW_YMAX] : (yRanges[model] ?? [-10, 20]);
+  const yRanges = { "AD-AS": [0, 200], "IS-LM": [-10, 20], "IS-MP": [-2, 14], "Solow": [0, SOLOW_YMAX] };
+  const [yMin, yMax] = yRanges[model] ?? [-10, 20];
+  const xMax = model === "Solow" ? SOLOW_KMAX : 200;
 
-  const sx = (x) => mg.left + (x / (model === "Solow" ? SOLOW_KMAX : 200)) * iW;
+  const sx = (x) => mg.left + (x / xMax) * iW;
   const sy = (y) => H - mg.bottom - ((y - yMin) / (yMax - yMin)) * iH;
 
   // ── Model builders ────────────────────────────────────────────────────────
@@ -111,66 +114,47 @@ export default function App() {
     return { IS, MP, feOut, nr: p.naturalRate, eq: { x: clamp(eqY, 0, 200), y: clamp(IS(eqY), -2, 14) } };
   }
 
-  // ── Solow builder ─────────────────────────────────────────────────────────
-  // Per-worker Solow model: y = k^α
-  // Investment:   sf(k) = s·k^α
-  // Break-even:   (δ + n + g)·k
-  // Steady state: s·k^α = (δ+n+g)·k  →  k* = (s/(δ+n+g))^(1/(1-α))
-  const ALPHA = 0.35;
-
   function buildSolow(p) {
     const { savingsRate: s, depreciation: d, popGrowth: n, techGrowth: g, capitalShock: shock } = p;
     const breakEvenRate = d + n + g;
     const kStar = breakEvenRate > 0 ? Math.pow(s / breakEvenRate, 1 / (1 - ALPHA)) : 80;
-    const yStar = Math.pow(kStar, ALPHA);
+    const yStar = Math.pow(Math.max(kStar, 0.01), ALPHA);
     const iStar = s * yStar;
-
-    // Current capital with shock applied
     const kCurrent = clamp(kStar + shock, 1, SOLOW_KMAX - 2);
-
-    const prodFn    = (k) => Math.pow(Math.max(k, 0.01), ALPHA);           // y = k^α
-    const investFn  = (k) => s * Math.pow(Math.max(k, 0.01), ALPHA);      // s·f(k)
-    const breakEven = (k) => breakEvenRate * k;                              // (δ+n+g)·k
-
+    const prodFn   = (k) => Math.pow(Math.max(k, 0.01), ALPHA);
+    const investFn = (k) => s * Math.pow(Math.max(k, 0.01), ALPHA);
+    const breakEven = (k) => breakEvenRate * k;
     return {
       prodFn, investFn, breakEven,
       kStar: clamp(kStar, 1, SOLOW_KMAX),
       yStar: clamp(yStar, 0, SOLOW_YMAX),
       iStar: clamp(iStar, 0, SOLOW_YMAX),
-      kCurrent,
-      yCurrent: prodFn(kCurrent),
-      iCurrent: investFn(kCurrent),
-      breakEvenRate,
+      kCurrent, yCurrent: prodFn(kCurrent),
+      iCurrent: investFn(kCurrent), breakEvenRate,
     };
   }
 
   const cp = { govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength, mpSlope, naturalRate, outputGap, savingsRate, depreciation, popGrowth, techGrowth, capitalShock };
-
   const adAs  = useMemo(() => buildAdAs(cp),  [govSpending, taxes, moneySupply, interestRate, inflation, shockType, shockStrength]);
   const isLm  = useMemo(() => buildIsLm(cp),  [govSpending, taxes, moneySupply, interestRate]);
   const isMp  = useMemo(() => buildIsMp(cp),  [govSpending, taxes, mpSlope, naturalRate, outputGap]);
   const solow = useMemo(() => buildSolow(cp), [savingsRate, depreciation, popGrowth, techGrowth, capitalShock]);
 
-  // Ghost equilibrium only
   const ghostEqOnly = useMemo(() => {
     if (!ghost) return null;
     if (ghost.model === "AD-AS")  return buildAdAs(ghost).eq;
     if (ghost.model === "IS-LM")  return buildIsLm(ghost).eq;
     if (ghost.model === "IS-MP")  return buildIsMp(ghost).eq;
-    if (ghost.model === "Solow") {
-      const g = buildSolow(ghost);
-      return { x: g.kStar, y: g.iStar };
-    }
+    if (ghost.model === "Solow")  { const g = buildSolow(ghost); return { x: g.kStar, y: g.iStar }; }
     return null;
   }, [ghost]);
 
   // ── Path builder ──────────────────────────────────────────────────────────
-  const makePath = (fn, xMax = 200, steps = 100) => {
+  const makePath = (fn, kmax = 200, steps = 100) => {
     let d = "";
     for (let i = 0; i <= steps; i++) {
-      const x  = (xMax / steps) * i;
-      const px = sx(x);
-      const py = sy(fn(x));
+      const x = (kmax / steps) * i;
+      const px = sx(x), py = sy(fn(x));
       d += i === 0 ? `M ${px} ${py}` : ` L ${px} ${py}`;
     }
     return d;
@@ -194,8 +178,8 @@ export default function App() {
     "contractionary fiscal":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(1000); setTaxes(45);   setShockResult("Contractionary fiscal: IS shifts left → lower income & interest rate."); }),
     "expansionary monetary":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: LM shifts right → higher income, lower rate."); }),
     "contractionary monetary": () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
-    "higher savings rate":     () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.45); setShockResult("Higher savings rate: s↑ → investment curve shifts up → higher k* and y*."); }),
-    "lower savings rate":      () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.15); setShockResult("Lower savings rate: s↓ → investment curve shifts down → lower k* and y*."); }),
+    "higher savings rate":     () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); }),
+    "lower savings rate":      () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); }),
     "capital destruction":     () => applyPreset("Solow", () => { setModel("Solow"); setCapitalShock(-20); setShockResult("Capital destruction: k falls below k* → economy converges back to steady state."); }),
   };
 
@@ -205,10 +189,10 @@ export default function App() {
     if (p) p(); else alert("Try: " + Object.keys(PRESETS).join(", "));
   };
 
-  const applyExpFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(3500); setTaxes(20); });
-  const applyConFiscal   = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP") setModel("IS-LM"); setGovSpending(1000); setTaxes(45); });
-  const applyExpMon      = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(130); setInterestRate(2); });
-  const applyConMon      = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(80);  setInterestRate(7); });
+  const applyExpFiscal  = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); setGovSpending(3500); setTaxes(20); });
+  const applyConFiscal  = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); setGovSpending(1000); setTaxes(45); });
+  const applyExpMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(130); setInterestRate(2); });
+  const applyConMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(80);  setInterestRate(7); });
 
   const resetAll = () => {
     setModel("IS-LM"); setPolicyType("Fiscal");
@@ -216,40 +200,36 @@ export default function App() {
     setInflation(4); setShockType("None"); setShockStrength(0);
     setShockQuery(""); setShockResult("");
     setNaturalRate(2); setMpSlope(0.05); setOutputGap(0);
-    setSavingsRate(0.3); setDepreciation(0.05); setPopGrowth(0.01); setTechGrowth(0.02); setCapitalShock(0);
+    setSavingsRate(0.30); setDepreciation(0.05); setPopGrowth(0.01); setTechGrowth(0.02); setCapitalShock(0);
     setGhost(null); dragging.current = false;
   };
 
   // ── Equilibria ────────────────────────────────────────────────────────────
   const curEq =
-    model === "AD-AS"  ? adAs.eq
-    : model === "IS-MP"  ? isMp.eq
-    : model === "Solow"  ? { x: solow.kStar, y: solow.iStar }
+    model === "AD-AS" ? adAs.eq
+    : model === "IS-MP" ? isMp.eq
+    : model === "Solow" ? { x: solow.kStar, y: solow.iStar }
     : isLm.eq;
 
   const cx = sx(curEq.x), cy = sy(curEq.y);
-
   const ghostEq = ghostEqOnly && ghost && model === ghost.model ? ghostEqOnly : null;
   const gx = ghostEq ? sx(ghostEq.x) : null;
   const gy = ghostEq ? sy(ghostEq.y) : null;
   const hasGhost = ghostEq !== null
     && (Math.abs(curEq.x - ghostEq.x) > 0.3 || Math.abs(curEq.y - ghostEq.y) > 0.03);
 
-  // ── Solow interpretation ──────────────────────────────────────────────────
-  const solowInterp = useMemo(() => {
-    if (shockResult) return shockResult;
-    const { kStar, yStar, iStar, kCurrent, breakEvenRate } = solow;
-    let t = `Steady-state capital k* = ${kStar.toFixed(1)}, output y* = ${yStar.toFixed(2)}, investment i* = ${iStar.toFixed(2)}. `;
-    t += `Break-even rate (δ+n+g) = ${(breakEvenRate * 100).toFixed(1)}%. `;
-    if (capitalShock < -1) t += `Capital is below k* — economy is converging upward to steady state.`;
-    else if (capitalShock > 1) t += `Capital is above k* — economy is converging downward to steady state.`;
-    else t += `Economy is at or near its steady-state equilibrium.`;
-    return t;
-  }, [solow, capitalShock, shockResult]);
-
-  // ── General interpretation ────────────────────────────────────────────────
+  // ── Interpretation ────────────────────────────────────────────────────────
   const interpretation = useMemo(() => {
-    if (model === "Solow") return solowInterp;
+    if (model === "Solow") {
+      if (shockResult) return shockResult;
+      const { kStar, yStar, iStar, breakEvenRate } = solow;
+      let t = `Steady state: k* = ${kStar.toFixed(1)}, y* = ${yStar.toFixed(2)}, i* = ${iStar.toFixed(2)}. `;
+      t += `Break-even rate (δ+n+g) = ${(breakEvenRate * 100).toFixed(1)}%. `;
+      if (capitalShock < -1) t += "k is below k* — economy converging upward.";
+      else if (capitalShock > 1) t += "k is above k* — economy converging downward.";
+      else t += "Economy at steady-state equilibrium.";
+      return t;
+    }
     if (shockResult) return shockResult;
     if (model === "AD-AS") {
       let t = "";
@@ -269,19 +249,46 @@ export default function App() {
     if (policyType === "Monetary") t += moneySupply > 100 || interestRate < 4 ? "Expansionary monetary: LM shifts right. " : moneySupply < 100 || interestRate > 4 ? "Contractionary monetary: LM shifts left. " : "Monetary policy neutral. ";
     t += isLm.eq.x > isLm.fe + 2 ? "Output above full-employment." : isLm.eq.x < isLm.fe - 2 ? "Output below full-employment." : "Output near full-employment.";
     return t;
-  }, [model, solowInterp, shockResult, policyType, govSpending, taxes, moneySupply, interestRate, shockType, shockStrength, adAs, isLm, isMp]);
+  }, [model, shockResult, policyType, govSpending, taxes, moneySupply, interestRate, shockType, shockStrength, adAs, isLm, isMp, solow, capitalShock]);
 
   const axisLabels = {
-    "AD-AS":  { x: "Real Output (Y)",         y: "Price Level (P)" },
-    "IS-LM":  { x: "Income / Output (Y)",     y: "Interest Rate (i)" },
-    "IS-MP":  { x: "Output (Y)",               y: "Real Interest Rate (r)" },
-    "Solow":  { x: "Capital per worker (k)",   y: "Output / Investment" },
+    "AD-AS": { x: "Real Output (Y)",       y: "Price Level (P)" },
+    "IS-LM": { x: "Income / Output (Y)",   y: "Interest Rate (i)" },
+    "IS-MP": { x: "Output (Y)",             y: "Real Interest Rate (r)" },
+    "Solow": { x: "Capital per worker (k)", y: "Output / Investment" },
   };
   const { x: xLabel, y: yLabel } = axisLabels[model];
 
-  const xBot    = H - mg.bottom;
+  const xBot = H - mg.bottom;
   const xArrowY = xBot + 22;
   const yArrowX = mg.left - 22;
+
+  // ── helpers for arrow rendering ───────────────────────────────────────────
+  const ArrowOverlay = () => {
+    if (!hasGhost) return null;
+    const xDir = curEq.x > ghostEq.x ? 1 : -1;
+    const yDir = curEq.y > ghostEq.y ? 1 : -1;
+    const dec = model === "Solow" ? 1 : 0;
+    const ydec = model === "Solow" ? 2 : 1;
+    return (
+      <>
+        <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+        <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+        <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+        <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
+        <line x1={gx+(xDir>0?5:-5)} y1={xArrowY} x2={cx-(xDir>0?9:-9)} y2={xArrowY} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
+        <text x={gx} y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(dec)}</text>
+        <text x={cx} y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(dec)}</text>
+        {Math.abs(curEq.y - ghostEq.y) > 0.03 && <>
+          <line x1={yArrowX} y1={gy+(yDir>0?5:-5)} x2={yArrowX} y2={cy-(yDir>0?9:-9)} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
+          <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(ydec)}</text>
+          <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(ydec)}</text>
+        </>}
+        <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
+        <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
+      </>
+    );
+  };
 
   return (
     <div className="page">
@@ -307,7 +314,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Model selector */}
+            {/* Model */}
             <label className="field">
               <span>Model</span>
               <select value={model} onChange={(e) => {
@@ -322,10 +329,9 @@ export default function App() {
               </select>
             </label>
 
-            {/* ── NON-SOLOW CONTROLS ── */}
+            {/* ── Non-Solow controls ── */}
             {model !== "Solow" && (
               <>
-                {/* Policy tabs */}
                 <div className="policy-switch">
                   <button className={policyType === "Fiscal" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Fiscal"); }}>Fiscal</button>
                   <button className={policyType === "Monetary" ? "tab active" : "tab"} onClick={() => { clear(); setPolicyType("Monetary"); if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); }}>Monetary</button>
@@ -334,18 +340,8 @@ export default function App() {
                 {/* Fiscal */}
                 {policyType === "Fiscal" && (
                   <div className="panel-section">
-                    <SliderField
-  label={`General Government Spending (billion): ${govSpending.toLocaleString()}`}
-  value={govSpending}
-  min={100} max={5000} step={50}
-  onChange={(v) => { clear(); setGovSpending(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
-                    <SliderField
-  label={`Taxes: ${taxes}%`}
-  value={taxes}
-  min={0} max={100}
-  onChange={(v) => { clear(); setTaxes(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Gov. Spending (billion): ${govSpending.toLocaleString()}`} value={govSpending} min={100} max={5000} step={50} onChange={(v) => { clear(); setGovSpending(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Taxes: ${taxes}%`} value={taxes} min={0} max={100} onChange={(v) => { clear(); setTaxes(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="button-row">
                       <button onClick={applyExpFiscal}>Expansionary</button>
                       <button onClick={applyConFiscal}>Contractionary</button>
@@ -356,18 +352,8 @@ export default function App() {
                 {/* Monetary IS-LM */}
                 {model === "IS-LM" && policyType === "Monetary" && (
                   <div className="panel-section">
-                    <SliderField
-  label={`Money supply: ${moneySupply}`}
-  value={moneySupply}
-  min={60} max={160}
-  onChange={(v) => { clear(); setMoneySupply(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
-                    <SliderField
-  label={`Interest rate: ${interestRate}%`}
-  value={interestRate}
-  min={-10} max={20}
-  onChange={(v) => { clear(); setInterestRate(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={(v) => { clear(); setInterestRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="button-row">
                       <button onClick={applyExpMon}>Expansionary</button>
                       <button onClick={applyConMon}>Contractionary</button>
@@ -378,21 +364,11 @@ export default function App() {
                 {/* Monetary AD-AS */}
                 {model === "AD-AS" && policyType === "Monetary" && (
                   <div className="panel-section">
-                    <SliderField
-  label={`Money supply: ${moneySupply}`}
-  value={moneySupply}
-  min={60} max={160}
-  onChange={(v) => { clear(); setMoneySupply(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
-                    <SliderField
-  label={`Interest rate: ${interestRate}%`}
-  value={interestRate}
-  min={-10} max={20}
-  onChange={(v) => { clear(); setInterestRate(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={(v) => { clear(); setInterestRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="button-row">
-                      <button onClick={() => applyPreset(model, () => { setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: AD shifts right → higher output & prices."); })}>Expansionary</button>
-                      <button onClick={() => applyPreset(model, () => { setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: AD shifts left → lower output & prices."); })}>Contractionary</button>
+                      <button onClick={() => applyPreset(model, () => { setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: AD shifts right."); })}>Expansionary</button>
+                      <button onClick={() => applyPreset(model, () => { setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: AD shifts left."); })}>Contractionary</button>
                     </div>
                   </div>
                 )}
@@ -400,24 +376,9 @@ export default function App() {
                 {/* IS-MP */}
                 {model === "IS-MP" && policyType === "Monetary" && (
                   <div className="panel-section">
-                    <SliderField
-  label={`Natural rate r* = ${naturalRate.toFixed(1)}%`}
-  value={naturalRate}
-  min={0} max={8} step={0.1}
-  onChange={(v) => { clear(); setNaturalRate(v); }}
-  onDown={() => onDown(model)} onUp={onUp} dec={1} />
-                    <SliderField
-  label={`MP slope λ = ${mpSlope.toFixed(2)}`}
-  value={mpSlope}
-  min={0.01} max={0.2} step={0.01}
-  onChange={(v) => { clear(); setMpSlope(v); }}
-  onDown={() => onDown(model)} onUp={onUp} dec={2} />
-                    <SliderField
-  label={`CB target shift: {outputGap > 0 ? `}+" : ""}{outputGap}"
-  value={outputGap}
-  min={-20} max={20}
-  onChange={(v) => { clear(); setOutputGap(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Natural rate r* = ${naturalRate.toFixed(1)}%`} value={naturalRate} min={0} max={8} step={0.1} dec={1} onChange={(v) => { clear(); setNaturalRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`MP slope λ = ${mpSlope.toFixed(2)}`} value={mpSlope} min={0.01} max={0.2} step={0.01} dec={2} onChange={(v) => { clear(); setMpSlope(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`CB target shift: ${outputGap > 0 ? "+" : ""}${outputGap}`} value={outputGap} min={-20} max={20} onChange={(v) => { clear(); setOutputGap(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="info-hint">r = r* + λ·(Y − Y*)</div>
                   </div>
                 )}
@@ -425,70 +386,35 @@ export default function App() {
                 {/* AD-AS shocks */}
                 {model === "AD-AS" && (
                   <div className="panel-section">
-                    <SliderField
-  label={`Inflation: ${inflation}%`}
-  value={inflation}
-  min={-10} max={50}
-  onChange={(v) => { clear(); setInflation(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Inflation: ${inflation}%`} value={inflation} min={-10} max={50} onChange={(v) => { clear(); setInflation(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <label className="field">
                       <span>Shock type</span>
                       <select value={shockType} onChange={(e) => { onDown(model); clear(); setShockType(e.target.value); }}>
                         <option>None</option><option>Demand</option><option>Supply</option>
                       </select>
                     </label>
-                    <SliderField
-  label={`{shockType !== `}None" ? `${shockType} shock: ${shockStrength}` : `Shock intensity: ${shockStrength}`}"
-  value={shockStrength}
-  min={-10} max={10}
-  onChange={(v) => { clear(); setShockStrength(v); }}
-  onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`${shockType !== "None" ? shockType + " shock" : "Shock intensity"}: ${shockStrength}`} value={shockStrength} min={-10} max={10} onChange={(v) => { clear(); setShockStrength(v); }} onDown={() => onDown(model)} onUp={onUp} />
                   </div>
                 )}
               </>
             )}
 
-            {/* ── SOLOW CONTROLS ── */}
+            {/* ── Solow controls ── */}
             {model === "Solow" && (
               <div className="panel-section">
-                <div className="info-hint" style={{marginBottom:"12px"}}>y = k^α, α = {ALPHA} &nbsp;|&nbsp; s·f(k) = (δ+n+g)·k at k*</div>
-                <SliderField
-  label={`Savings rate s = ${(savingsRate * 100).toFixed(0)}%`}
-  value={savingsRate}
-  min={0.01} max={0.99} step={0.01}
-  onChange={(v) => { clear(); setSavingsRate(v); }}
-  onDown={() => onDown("Solow")} onUp={onUp} dec={2} />
-                <SliderField
-  label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`}
-  value={depreciation}
-  min={0.01} max={0.2} step={0.005}
-  onChange={(v) => { clear(); setDepreciation(v); }}
-  onDown={() => onDown("Solow")} onUp={onUp} dec={3} />
-                <SliderField
-  label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`}
-  value={popGrowth}
-  min={0} max={0.05} step={0.001}
-  onChange={(v) => { clear(); setPopGrowth(v); }}
-  onDown={() => onDown("Solow")} onUp={onUp} dec={3} />
-                <SliderField
-  label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`}
-  value={techGrowth}
-  min={0} max={0.05} step={0.001}
-  onChange={(v) => { clear(); setTechGrowth(v); }}
-  onDown={() => onDown("Solow")} onUp={onUp} dec={3} />
-                <SliderField
-  label={`Capital shock Δk = {capitalShock > 0 ? `}+" : ""}{capitalShock}"
-  value={capitalShock}
-  min={-40} max={40}
-  onChange={(v) => { clear(); setCapitalShock(v); }}
-  onDown={() => onDown("Solow")} onUp={onUp} />
+                <div className="info-hint" style={{ marginBottom: "12px" }}>y = k^α &nbsp;(α = {ALPHA}) &nbsp;|&nbsp; steady state: s·f(k) = (δ+n+g)·k</div>
+                <SliderField label={`Savings rate s = ${(savingsRate * 100).toFixed(0)}%`} value={savingsRate} min={0.01} max={0.99} step={0.01} dec={2} onChange={(v) => { clear(); setSavingsRate(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`} value={depreciation} min={0.01} max={0.2} step={0.005} dec={3} onChange={(v) => { clear(); setDepreciation(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`} value={techGrowth} min={0} max={0.05} step={0.001} dec={3} onChange={(v) => { clear(); setTechGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-40} max={40} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <div className="button-row">
-                  <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: investment curve shifts up → k* and y* increase."); })}>↑ Savings</button>
-                  <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: investment curve shifts down → k* and y* decrease."); })}>↓ Savings</button>
+                  <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); })}>↑ Savings</button>
+                  <button onClick={() => applyPreset("Solow", () => { setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); })}>↓ Savings</button>
                 </div>
                 <div className="button-row">
-                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(-25); setShockResult("Capital destruction: k falls below k* → economy converges back up."); })}>Capital Shock ↓</button>
-                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(+25); setShockResult("Capital windfall: k rises above k* → economy converges back down."); })}>Capital Shock ↑</button>
+                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(-25); setShockResult("Capital destruction: k falls below k* → economy converges back up."); })}>Capital ↓</button>
+                  <button onClick={() => applyPreset("Solow", () => { setCapitalShock(+25); setShockResult("Capital windfall: k rises above k* → economy converges back down."); })}>Capital ↑</button>
                 </div>
               </div>
             )}
@@ -498,7 +424,6 @@ export default function App() {
               {hasGhost && <button className="clear-btn" onClick={() => { setGhost(null); dragging.current = false; }}>Clear</button>}
             </div>
 
-            {/* Info box */}
             <div className="info-box">
               <strong>Interpretation</strong>
               <p>{interpretation}</p>
@@ -511,7 +436,7 @@ export default function App() {
                   <strong>y*:</strong> {solow.yStar.toFixed(2)}<br />
                   <strong>i*:</strong> {solow.iStar.toFixed(2)}<br />
                   <strong>δ+n+g:</strong> {(solow.breakEvenRate * 100).toFixed(1)}%
-                  {capitalShock !== 0 && <><br /><strong>k current:</strong> {solow.kCurrent.toFixed(1)}</>}
+                  {capitalShock !== 0 && <><br /><strong>k now:</strong> {solow.kCurrent.toFixed(1)}</>}
                 </p>
               )}
             </div>
@@ -522,6 +447,7 @@ export default function App() {
         <section className="graph-section">
           <div className="card graph-card">
             <h2>{model === "Solow" ? "Solow Growth Model" : `${model} Graph`}</h2>
+
             <svg viewBox={`0 0 ${W} ${H}`} className="graph-svg">
               <defs>
                 <marker id="arrBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
@@ -530,9 +456,10 @@ export default function App() {
               </defs>
 
               {/* Grid */}
-              {[25,50,75,100,125,150,175].map(x => (
-                <line key={"gx"+x} x1={sx(model === "Solow" ? x * SOLOW_KMAX / 200 : x)} y1={mg.top} x2={sx(model === "Solow" ? x * SOLOW_KMAX / 200 : x)} y2={H-mg.bottom} stroke="#27272a" strokeWidth="1" />
-              ))}
+              {[1,2,3,4,5,6,7].map(i => {
+                const x = (xMax / 8) * i;
+                return <line key={"gx"+i} x1={sx(x)} y1={mg.top} x2={sx(x)} y2={H-mg.bottom} stroke="#27272a" strokeWidth="1" />;
+              })}
               {[0.25,0.5,0.75].map(t => {
                 const yv = yMin + (yMax - yMin) * t;
                 return <line key={"gy"+t} x1={mg.left} y1={sy(yv)} x2={W-mg.right} y2={sy(yv)} stroke="#27272a" strokeWidth="1" />;
@@ -540,11 +467,11 @@ export default function App() {
 
               {/* Axes */}
               <line x1={mg.left} y1={H-mg.bottom} x2={W-mg.right} y2={H-mg.bottom} stroke="#52525b" strokeWidth="2" />
-              <line x1={mg.left} y1={H-mg.bottom} x2={mg.left}     y2={mg.top}      stroke="#52525b" strokeWidth="2" />
-              <text x={W/2-55} y={H-8}  fontSize="13" fill="#a1a1aa">{xLabel}</text>
-              <text x="10"      y="22"   fontSize="13" fill="#a1a1aa">{yLabel}</text>
+              <line x1={mg.left} y1={H-mg.bottom} x2={mg.left} y2={mg.top} stroke="#52525b" strokeWidth="2" />
+              <text x={W/2-55} y={H-8} fontSize="13" fill="#a1a1aa">{xLabel}</text>
+              <text x="10" y="22" fontSize="13" fill="#a1a1aa">{yLabel}</text>
 
-              {/* ── AD-AS curves ── */}
+              {/* ── AD-AS ── */}
               {model === "AD-AS" && <>
                 <path d={makePath(adAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2.5" />
                 <text x={sx(155)} y={sy(adAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">AD</text>
@@ -554,7 +481,7 @@ export default function App() {
                 <text x={sx(adAs.po)+5} y={mg.top+16} fill="#34d399" fontSize="12">LRAS</text>
               </>}
 
-              {/* ── IS-LM curves ── */}
+              {/* ── IS-LM ── */}
               {model === "IS-LM" && <>
                 <path d={makePath(isLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
                 <text x={sx(155)} y={sy(isLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
@@ -564,7 +491,7 @@ export default function App() {
                 <text x={sx(isLm.fe)+5} y={mg.top+16} fill="#34d399" fontSize="12">FE</text>
               </>}
 
-              {/* ── IS-MP curves ── */}
+              {/* ── IS-MP ── */}
               {model === "IS-MP" && <>
                 <path d={makePath(isMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
                 <text x={sx(150)} y={sy(isMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
@@ -576,91 +503,35 @@ export default function App() {
                 <text x={sx(isMp.feOut)+5} y={mg.top+16} fill="#34d399" fontSize="12">Y*</text>
               </>}
 
-              {/* ── Solow curves ── */}
+              {/* ── Solow ── */}
               {model === "Solow" && <>
-                {/* Production function y = k^α */}
                 <path d={makePath(solow.prodFn, SOLOW_KMAX)} fill="none" stroke="#fbbf24" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX * 0.85)} y={sy(solow.prodFn(SOLOW_KMAX * 0.85))-9} fill="#fbbf24" fontSize="13" fontWeight="700">y = k^α</text>
-
-                {/* Investment s·f(k) */}
+                <text x={sx(SOLOW_KMAX*0.82)} y={sy(solow.prodFn(SOLOW_KMAX*0.82))-9} fill="#fbbf24" fontSize="13" fontWeight="700">y = kᵅ</text>
                 <path d={makePath(solow.investFn, SOLOW_KMAX)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX * 0.78)} y={sy(solow.investFn(SOLOW_KMAX * 0.78))-9} fill="#818cf8" fontSize="13" fontWeight="700">s·f(k)</text>
-
-                {/* Break-even line (δ+n+g)·k */}
+                <text x={sx(SOLOW_KMAX*0.75)} y={sy(solow.investFn(SOLOW_KMAX*0.75))-9} fill="#818cf8" fontSize="13" fontWeight="700">s·f(k)</text>
                 <path d={makePath(solow.breakEven, SOLOW_KMAX)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX * 0.82)} y={sy(solow.breakEven(SOLOW_KMAX * 0.82))+16} fill="#f87171" fontSize="13" fontWeight="700">(δ+n+g)k</text>
-
-                {/* Steady-state vertical line k* */}
+                <text x={sx(SOLOW_KMAX*0.78)} y={sy(solow.breakEven(SOLOW_KMAX*0.78))+16} fill="#f87171" fontSize="13" fontWeight="700">(δ+n+g)k</text>
                 <line x1={sx(solow.kStar)} y1={mg.top} x2={sx(solow.kStar)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(solow.kStar)+5} y={mg.top+16} fill="#34d399" fontSize="12">k*</text>
-
-                {/* Current capital position (if shocked) */}
                 {capitalShock !== 0 && <>
                   <line x1={sx(solow.kCurrent)} y1={mg.top} x2={sx(solow.kCurrent)} y2={H-mg.bottom} stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.8" />
                   <text x={sx(solow.kCurrent)+5} y={mg.top+32} fill="#f59e0b" fontSize="11">k</text>
-                  {/* Convergence arrow along x-axis */}
                   {(() => {
-                    const kDir = solow.kStar > solow.kCurrent ? 1 : -1;
-                    const x1 = sx(solow.kCurrent) + (kDir > 0 ? 5 : -5);
-                    const x2 = sx(solow.kStar)    - (kDir > 0 ? 9 : -9);
-                    return (
-                      <line x1={x1} y1={xBot - 14} x2={x2} y2={xBot - 14}
-                        stroke="#f59e0b" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    );
+                    const dir = solow.kStar > solow.kCurrent ? 1 : -1;
+                    return <line x1={sx(solow.kCurrent)+(dir>0?6:-6)} y1={xBot-14} x2={sx(solow.kStar)-(dir>0?10:-10)} y2={xBot-14} stroke="#f59e0b" strokeWidth="2" markerEnd="url(#arrBlue)" />;
                   })()}
                 </>}
               </>}
 
-              {/* ── Change-path arrows (non-Solow) ── */}
-              {hasGhost && model !== "Solow" && (() => {
-                const xDir = curEq.x > ghostEq.x ? 1 : -1;
-                const yDir = curEq.y > ghostEq.y ? 1 : -1;
-                return (
-                  <>
-                    <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={gx+(xDir>0?5:-5)} y1={xArrowY} x2={cx-(xDir>0?9:-9)} y2={xArrowY} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={gx} y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(0)}</text>
-                    <text x={cx} y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(0)}</text>
-                    <line x1={yArrowX} y1={gy+(yDir>0?5:-5)} x2={yArrowX} y2={cy-(yDir>0?9:-9)} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(1)}</text>
-                    <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(1)}</text>
-                    <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
-                    <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
-                  </>
-                );
-              })()}
+              {/* ── Arrows ── */}
+              <ArrowOverlay />
 
-              {/* ── Solow E₁→E₂ arrows ── */}
-              {hasGhost && model === "Solow" && (() => {
-                const xDir = curEq.x > ghostEq.x ? 1 : -1;
-                const yDir = curEq.y > ghostEq.y ? 1 : -1;
-                return (
-                  <>
-                    <line x1={gx} y1={gy} x2={gx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={cx} y1={cy} x2={cx} y2={xBot} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={mg.left} y1={gy} x2={gx} y2={gy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={mg.left} y1={cy} x2={cx} y2={cy} stroke="#60a5fa" strokeWidth="1.5" strokeDasharray="5 4" opacity="0.8" />
-                    <line x1={gx+(xDir>0?5:-5)} y1={xArrowY} x2={cx-(xDir>0?9:-9)} y2={xArrowY} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={gx} y={xArrowY+15} fontSize="11" fill="#60a5fa" textAnchor="middle">{ghostEq.x.toFixed(1)}</text>
-                    <text x={cx} y={xArrowY+15} fontSize="11" fill="#f1f5f9" textAnchor="middle">{curEq.x.toFixed(1)}</text>
-                    <line x1={yArrowX} y1={gy+(yDir>0?5:-5)} x2={yArrowX} y2={cy-(yDir>0?9:-9)} stroke="#60a5fa" strokeWidth="2" markerEnd="url(#arrBlue)" />
-                    <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(2)}</text>
-                    <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(2)}</text>
-                    <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
-                    <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
-                  </>
-                );
-              })()}
-
-              {/* ── Current equilibrium dot ── */}
+              {/* ── Equilibrium dot ── */}
               <circle cx={cx} cy={cy} r="7" fill="#f1f5f9" />
               <text x={cx+10} y={cy-10} fontSize="13" fill="#f1f5f9" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
               {!hasGhost && <>
-                <text x={cx}        y={xBot+18} fontSize="12" fill="#a1a1aa" textAnchor="middle">{curEq.x.toFixed(model === "Solow" ? 1 : 0)}</text>
-                <text x={mg.left-8} y={cy+4}    fontSize="12" fill="#a1a1aa" textAnchor="end">{curEq.y.toFixed(model === "Solow" ? 2 : 1)}</text>
+                <text x={cx} y={xBot+18} fontSize="12" fill="#a1a1aa" textAnchor="middle">{curEq.x.toFixed(model === "Solow" ? 1 : 0)}</text>
+                <text x={mg.left-8} y={cy+4} fontSize="12" fill="#a1a1aa" textAnchor="end">{curEq.y.toFixed(model === "Solow" ? 2 : 1)}</text>
               </>}
             </svg>
           </div>
@@ -669,6 +540,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
