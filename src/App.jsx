@@ -34,7 +34,7 @@ export default function App() {
 
   const [govSpending, setGovSpending] = useState(2000);
   const [taxes, setTaxes] = useState(30);
-  const [moneySupply, setMoneySupply] = useState(100);
+  const [moneySupply, setMoneySupply] = useState(10000);
   const [interestRate, setInterestRate] = useState(4);
   const [inflation, setInflation] = useState(4);
   const [shockType, setShockType] = useState("None");
@@ -82,7 +82,7 @@ export default function App() {
   // ── Model builders ────────────────────────────────────────────────────────
   function buildAdAs(p) {
     const adShift = (p.govSpending - 2000) * 0.0156 - (p.taxes - 30) * 0.6
-      + (p.moneySupply - 100) * 0.5 - (p.interestRate - 4) * 4
+      + (p.moneySupply - 10000) * 0.00005 - (p.interestRate - 4) * 4
       + (p.shockType === "Demand" ? p.shockStrength * 8 : 0);
     const srasShift = (p.shockType === "Supply" ? p.shockStrength * 12 : 0) + p.inflation * 1.3;
     const AD   = (y) => 170 - 0.7 * y + adShift;
@@ -93,7 +93,7 @@ export default function App() {
 
   function buildIsLm(p) {
     const isShift = (p.govSpending - 2000) * 0.00111 - (p.taxes - 30) * 0.04;
-    const lmShift = (p.moneySupply - 100) * 0.05 - (p.interestRate - 4) * 0.6;
+    const lmShift = (p.moneySupply - 10000) * 0.000005 - (p.interestRate - 4) * 0.6;
     const IS  = (y) => 18 - 0.07 * y + isShift;
     const LM  = (y) => -2 + 0.09 * y - lmShift;
     const eqY = (20 + isShift + lmShift) / 0.16;
@@ -111,7 +111,7 @@ export default function App() {
 
   function buildSolow(p) {
     const { savingsRate: s, depreciation: d, popGrowth: n, techGrowth: g, capitalShock: shock } = p;
-    const breakEvenRate = d + n + g;
+    const breakEvenRate = Math.max(d + n + g, 0.001); // clamp so δ+n+g never hits zero
     const kStar = breakEvenRate > 0 ? Math.pow(s / breakEvenRate, 1 / (1 - ALPHA)) : 80;
     const yStar = Math.pow(Math.max(kStar, 0.01), ALPHA);
     const iStar = s * yStar;
@@ -181,8 +181,8 @@ export default function App() {
     "stagflation":             () => applyPreset(model, () => { setModel("AD-AS"); setShockType("Supply");  setShockStrength(8);  setInflation(8); setShockResult("Stagflation: severe negative supply shock → output ↓, prices ↑."); }),
     "expansionary fiscal":     () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(3500); setTaxes(20);   setShockResult("Expansionary fiscal: IS shifts right → higher income & interest rate."); }),
     "contractionary fiscal":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Fiscal");   setGovSpending(1000); setTaxes(45);   setShockResult("Contractionary fiscal: IS shifts left → lower income & interest rate."); }),
-    "expansionary monetary":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: LM shifts right → higher income, lower rate."); }),
-    "contractionary monetary": () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
+    "expansionary monetary":   () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(15000); setInterestRate(2); setShockResult("Expansionary monetary: LM shifts right → higher income, lower rate."); }),
+    "contractionary monetary": () => applyPreset(model, () => { setModel("IS-LM"); setPolicyType("Monetary"); setMoneySupply(5000); setInterestRate(7); setShockResult("Contractionary monetary: LM shifts left → lower income, higher rate."); }),
     "higher savings rate":     () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.45); setCapitalShock(0); setShockResult("Higher savings: s·f(k) shifts up → k* and y* increase."); }),
     "lower savings rate":      () => applyPreset("Solow", () => { setModel("Solow"); setSavingsRate(0.15); setCapitalShock(0); setShockResult("Lower savings: s·f(k) shifts down → k* and y* decrease."); }),
     "capital destruction":     () => applyPreset("Solow", () => { setModel("Solow"); setCapitalShock(-12); setShockResult("Capital destruction: k falls below k* → economy converges back to steady state."); }),
@@ -196,12 +196,12 @@ export default function App() {
 
   const applyExpFiscal  = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); setGovSpending(3500); setTaxes(20); });
   const applyConFiscal  = () => applyPreset(model, () => { setPolicyType("Fiscal");   if (model !== "IS-MP" && model !== "AD-AS") setModel("IS-LM"); setGovSpending(1000); setTaxes(45); });
-  const applyExpMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(130); setInterestRate(2); });
-  const applyConMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(80);  setInterestRate(7); });
+  const applyExpMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(15000); setInterestRate(2); });
+  const applyConMon     = () => applyPreset(model, () => { setPolicyType("Monetary"); setModel("IS-LM"); setMoneySupply(5000); setInterestRate(7); });
 
   const resetAll = () => {
     setModel("IS-LM"); setPolicyType("Fiscal");
-    setGovSpending(2000); setTaxes(30); setMoneySupply(100); setInterestRate(4);
+    setGovSpending(2000); setTaxes(30); setMoneySupply(10000); setInterestRate(4);
     setInflation(4); setShockType("None"); setShockStrength(0);
     setShockQuery(""); setShockResult("");
     setNaturalRate(2); setMpSlope(0.05); setOutputGap(0);
@@ -251,7 +251,7 @@ export default function App() {
     }
     let t = "";
     if (policyType === "Fiscal") t += govSpending > 2000 || taxes < 30 ? "Expansionary fiscal: IS shifts right. " : govSpending < 2000 || taxes > 30 ? "Contractionary fiscal: IS shifts left. " : "Fiscal policy neutral. ";
-    if (policyType === "Monetary") t += moneySupply > 100 || interestRate < 4 ? "Expansionary monetary: LM shifts right. " : moneySupply < 100 || interestRate > 4 ? "Contractionary monetary: LM shifts left. " : "Monetary policy neutral. ";
+    if (policyType === "Monetary") t += moneySupply > 10000 || interestRate < 4 ? "Expansionary monetary: LM shifts right. " : moneySupply < 10000 || interestRate > 4 ? "Contractionary monetary: LM shifts left. " : "Monetary policy neutral. ";
     t += isLm.eq.x > isLm.fe + 2 ? "Output above full-employment." : isLm.eq.x < isLm.fe - 2 ? "Output below full-employment." : "Output near full-employment.";
     return t;
   }, [model, shockResult, policyType, govSpending, taxes, moneySupply, interestRate, shockType, shockStrength, adAs, isLm, isMp, solow, capitalShock]);
@@ -357,7 +357,7 @@ export default function App() {
                 {/* Monetary IS-LM */}
                 {model === "IS-LM" && policyType === "Monetary" && (
                   <div className="panel-section">
-                    <SliderField label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Money supply: ${moneySupply}`} value={moneySupply} min={1000} max={50000} step={500} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <SliderField label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={(v) => { clear(); setInterestRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="button-row">
                       <button onClick={applyExpMon}>Expansionary</button>
@@ -369,11 +369,11 @@ export default function App() {
                 {/* Monetary AD-AS */}
                 {model === "AD-AS" && policyType === "Monetary" && (
                   <div className="panel-section">
-                    <SliderField label={`Money supply: ${moneySupply}`} value={moneySupply} min={60} max={160} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
+                    <SliderField label={`Central Bank's Money Supply (billion): ${moneySupply.toLocaleString()}`} value={moneySupply} min={100} max={50000} step={100} onChange={(v) => { clear(); setMoneySupply(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <SliderField label={`Interest rate: ${interestRate}%`} value={interestRate} min={-10} max={20} onChange={(v) => { clear(); setInterestRate(v); }} onDown={() => onDown(model)} onUp={onUp} />
                     <div className="button-row">
-                      <button onClick={() => applyPreset(model, () => { setMoneySupply(130); setInterestRate(2); setShockResult("Expansionary monetary: AD shifts right."); })}>Expansionary</button>
-                      <button onClick={() => applyPreset(model, () => { setMoneySupply(80);  setInterestRate(7); setShockResult("Contractionary monetary: AD shifts left."); })}>Contractionary</button>
+                      <button onClick={() => applyPreset(model, () => { setMoneySupply(15000); setInterestRate(2); setShockResult("Expansionary monetary: AD shifts right."); })}>Expansionary</button>
+                      <button onClick={() => applyPreset(model, () => { setMoneySupply(5000); setInterestRate(7); setShockResult("Contractionary monetary: AD shifts left."); })}>Contractionary</button>
                     </div>
                   </div>
                 )}
@@ -410,7 +410,7 @@ export default function App() {
                 <div className="info-hint" style={{ marginBottom: "12px" }}>y = k^α &nbsp;(α = {ALPHA}) &nbsp;|&nbsp; steady state: s·f(k) = (δ+n+g)·k</div>
                 <SliderField label={`Savings rate s = ${(savingsRate * 100).toFixed(0)}%`} value={savingsRate} min={0.01} max={0.99} step={0.01} dec={2} onChange={(v) => { clear(); setSavingsRate(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <SliderField label={`Depreciation δ = ${(depreciation * 100).toFixed(1)}%`} value={depreciation} min={0.01} max={0.5} step={0.005} dec={3} onChange={(v) => { clear(); setDepreciation(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
-                <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={0} max={0.15} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
+                <SliderField label={`Population growth n = ${(popGrowth * 100).toFixed(1)}%`} value={popGrowth} min={-0.05} max={0.15} step={0.001} dec={3} onChange={(v) => { clear(); setPopGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <SliderField label={`Technology growth g = ${(techGrowth * 100).toFixed(1)}%`} value={techGrowth} min={0} max={0.15} step={0.001} dec={3} onChange={(v) => { clear(); setTechGrowth(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <SliderField label={`Capital shock Δk = ${capitalShock > 0 ? "+" : ""}${capitalShock}`} value={capitalShock} min={-30} max={30} onChange={(v) => { clear(); setCapitalShock(v); }} onDown={() => onDown("Solow")} onUp={onUp} />
                 <div className="button-row">
@@ -545,6 +545,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
