@@ -82,7 +82,7 @@ export default function App() {
   // ── Model builders ────────────────────────────────────────────────────────
   function buildAdAs(p) {
     const adShift = (p.govSpending - 2000) * 0.0156 - (p.taxes - 30) * 0.6
-      + (p.moneySupply - 10000) * 0.00005 - (p.interestRate - 4) * 4
+      + (p.moneySupply - 10000) * 0.0025 - (p.interestRate - 4) * 4
       + (p.shockType === "Demand" ? p.shockStrength * 8 : 0);
     const srasShift = (p.shockType === "Supply" ? p.shockStrength * 12 : 0) + p.inflation * 1.3;
     const AD   = (y) => 170 - 0.7 * y + adShift;
@@ -93,7 +93,7 @@ export default function App() {
 
   function buildIsLm(p) {
     const isShift = (p.govSpending - 2000) * 0.00111 - (p.taxes - 30) * 0.04;
-    const lmShift = (p.moneySupply - 10000) * 0.000005 - (p.interestRate - 4) * 0.6;
+    const lmShift = (p.moneySupply - 10000) * 0.0003 - (p.interestRate - 4) * 0.6;
     const IS  = (y) => 18 - 0.07 * y + isShift;
     const LM  = (y) => -2 + 0.09 * y - lmShift;
     const eqY = (20 + isShift + lmShift) / 0.16;
@@ -545,6 +545,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
