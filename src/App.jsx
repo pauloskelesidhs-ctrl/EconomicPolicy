@@ -154,6 +154,12 @@ export default function App() {
     return null;
   }, [ghost]);
 
+  // Ghost curve data (for rendering old curves as solid lines)
+  const ghostAdAs = useMemo(() => ghost && ghost.model === "AD-AS" ? buildAdAs(ghost) : null, [ghost]);
+  const ghostIsLm = useMemo(() => ghost && ghost.model === "IS-LM" ? buildIsLm(ghost) : null, [ghost]);
+  const ghostIsMp = useMemo(() => ghost && ghost.model === "IS-MP" ? buildIsMp(ghost) : null, [ghost]);
+  const ghostSolow = useMemo(() => ghost && ghost.model === "Solow" ? buildSolow(ghost) : null, [ghost]);
+
   // ── Path builder ──────────────────────────────────────────────────────────
   const makePath = (fn, kmax = 200, steps = 100) => {
     let d = "";
@@ -289,7 +295,7 @@ export default function App() {
           <text x={yArrowX-4} y={gy+4} fontSize="11" fill="#60a5fa" textAnchor="end">{ghostEq.y.toFixed(ydec)}</text>
           <text x={yArrowX-4} y={cy+4} fontSize="11" fill="#f1f5f9" textAnchor="end">{curEq.y.toFixed(ydec)}</text>
         </>}
-        <circle cx={gx} cy={gy} r="6" fill="none" stroke="#60a5fa" strokeWidth="2" />
+        <circle cx={gx} cy={gy} r="8" fill="#60a5fa" /><circle cx={gx} cy={gy} r="5" fill="#000" />
         <text x={gx-14} y={gy-10} fontSize="12" fill="#60a5fa" fontWeight="700">E₁</text>
       </>
     );
@@ -478,30 +484,68 @@ export default function App() {
 
               {/* ── AD-AS ── */}
               {model === "AD-AS" && <>
-                <path d={makePath(adAs.AD)}   fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(adAs.AD(155))-8}   fill="#818cf8" fontSize="13" fontWeight="700">AD</text>
-                <path d={makePath(adAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(138)} y={sy(adAs.SRAS(138))-8} fill="#f87171" fontSize="13" fontWeight="700">SRAS</text>
+                {/* Old curves — fully solid, labeled 1 */}
+                {(() => {
+                  const adShifted  = ghostAdAs && Math.abs(ghostAdAs.AD(100)   - adAs.AD(100))   > 0.05;
+                  const srasShifted = ghostAdAs && Math.abs(ghostAdAs.SRAS(100) - adAs.SRAS(100)) > 0.05;
+                  return <>
+                    {adShifted && <>
+                      <path d={makePath(ghostAdAs.AD)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                      <text x={sx(190)} y={sy(ghostAdAs.AD(190))+14} fill="#818cf8" fontSize="12" fontWeight="700">AD₁</text>
+                    </>}
+                    {srasShifted && <>
+                      <path d={makePath(ghostAdAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                      <text x={sx(185)} y={sy(ghostAdAs.SRAS(185))-10} fill="#f87171" fontSize="12" fontWeight="700">SRAS₁</text>
+                    </>}
+                    <path d={makePath(adAs.AD)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                    <text x={sx(190)} y={sy(adAs.AD(190))-8} fill="#818cf8" fontSize="12" fontWeight="700">{adShifted ? "AD₂" : "AD"}</text>
+                    <path d={makePath(adAs.SRAS)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                    <text x={sx(185)} y={sy(adAs.SRAS(185))-10} fill="#f87171" fontSize="12" fontWeight="700">{srasShifted ? "SRAS₂" : "SRAS"}</text>
+                  </>;
+                })()}
                 <line x1={sx(adAs.po)} y1={mg.top} x2={sx(adAs.po)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
                 <text x={sx(adAs.po)+5} y={mg.top+16} fill="#34d399" fontSize="12">LRAS</text>
               </>}
 
               {/* ── IS-LM ── */}
-              {model === "IS-LM" && <>
-                <path d={makePath(isLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(isLm.IS(155))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
-                <path d={makePath(isLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(140)} y={sy(isLm.LM(140))-8} fill="#f87171" fontSize="13" fontWeight="700">LM</text>
-                <line x1={sx(isLm.fe)} y1={mg.top} x2={sx(isLm.fe)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
-                <text x={sx(isLm.fe)+5} y={mg.top+16} fill="#34d399" fontSize="12">FE</text>
-              </>}
+              {model === "IS-LM" && (() => {
+                const isShifted = ghostIsLm && Math.abs(ghostIsLm.IS(100) - isLm.IS(100)) > 0.05;
+                const lmShifted = ghostIsLm && Math.abs(ghostIsLm.LM(100) - isLm.LM(100)) > 0.05;
+                return <>
+                  {isShifted && <>
+                    <path d={makePath(ghostIsLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                    <text x={sx(192)} y={sy(ghostIsLm.IS(192))+14} fill="#818cf8" fontSize="12" fontWeight="700">IS₁</text>
+                  </>}
+                  {lmShifted && <>
+                    <path d={makePath(ghostIsLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                    <text x={sx(192)} y={sy(ghostIsLm.LM(192))-8} fill="#f87171" fontSize="12" fontWeight="700">LM₁</text>
+                  </>}
+                  <path d={makePath(isLm.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                  <text x={sx(192)} y={sy(isLm.IS(192))-8} fill="#818cf8" fontSize="12" fontWeight="700">{isShifted ? "IS₂" : "IS"}</text>
+                  <path d={makePath(isLm.LM)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                  <text x={sx(192)} y={sy(isLm.LM(192))+14} fill="#f87171" fontSize="12" fontWeight="700">{lmShifted ? "LM₂" : "LM"}</text>
+                  <line x1={sx(isLm.fe)} y1={mg.top} x2={sx(isLm.fe)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
+                  <text x={sx(isLm.fe)+5} y={mg.top+16} fill="#34d399" fontSize="12">FE</text>
+                </>;
+              })()}
 
               {/* ── IS-MP ── */}
-              {model === "IS-MP" && <>
-                <path d={makePath(isMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(150)} y={sy(isMp.IS(150))-8} fill="#818cf8" fontSize="13" fontWeight="700">IS</text>
-                <path d={makePath(isMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(155)} y={sy(isMp.MP(155))-8} fill="#f87171" fontSize="13" fontWeight="700">MP</text>
+              {model === "IS-MP" && (() => {
+                const isShifted = ghostIsMp && Math.abs(ghostIsMp.IS(100) - isMp.IS(100)) > 0.05;
+                const mpShifted = ghostIsMp && Math.abs(ghostIsMp.MP(100) - isMp.MP(100)) > 0.05;
+                return <>
+                  {isShifted && <>
+                    <path d={makePath(ghostIsMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                    <text x={sx(192)} y={sy(ghostIsMp.IS(192))+14} fill="#818cf8" fontSize="12" fontWeight="700">IS₁</text>
+                  </>}
+                  {mpShifted && <>
+                    <path d={makePath(ghostIsMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                    <text x={sx(192)} y={sy(ghostIsMp.MP(192))-8} fill="#f87171" fontSize="12" fontWeight="700">MP₁</text>
+                  </>}
+                  <path d={makePath(isMp.IS)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                  <text x={sx(192)} y={sy(isMp.IS(192))-8} fill="#818cf8" fontSize="12" fontWeight="700">{isShifted ? "IS₂" : "IS"}</text>
+                  <path d={makePath(isMp.MP)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                  <text x={sx(192)} y={sy(isMp.MP(192))+14} fill="#f87171" fontSize="12" fontWeight="700">{mpShifted ? "MP₂" : "MP"}</text>
                 <line x1={mg.left} y1={sy(isMp.nr)} x2={W-mg.right} y2={sy(isMp.nr)} stroke="#c084fc" strokeWidth="1.5" strokeDasharray="6 5" opacity="0.7" />
                 <text x={mg.left+4} y={sy(isMp.nr)-5} fill="#c084fc" fontSize="11">r*</text>
                 <line x1={sx(isMp.feOut)} y1={mg.top} x2={sx(isMp.feOut)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
@@ -510,14 +554,25 @@ export default function App() {
 
               {/* ── Solow ── */}
               {model === "Solow" && <>
+                {/* Old Solow curves — fully solid */}
+                {ghostSolow && <>
+                  <path d={makePath(ghostSolow.investFn, SOLOW_KMAX)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
+                  <text x={sx(SOLOW_KMAX*0.95)} y={sy(ghostSolow.investFn(SOLOW_KMAX*0.95))+14} fill="#818cf8" fontSize="12" fontWeight="700">s₁·f(k)</text>
+                  <path d={makePath(ghostSolow.breakEven, SOLOW_KMAX)} fill="none" stroke="#f87171" strokeWidth="2.5" />
+                  <text x={sx(SOLOW_KMAX*0.92)} y={sy(ghostSolow.breakEven(SOLOW_KMAX*0.92))+14} fill="#f87171" fontSize="12" fontWeight="700">(δ+n+g)₁k</text>
+                  <line x1={sx(ghostSolow.kStar)} y1={mg.top} x2={sx(ghostSolow.kStar)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="1.5" strokeDasharray="6 4" />
+                  <text x={sx(ghostSolow.kStar)+5} y={mg.top+32} fill="#34d399" fontSize="12">k₁*</text>
+                </>}
+                {/* Production function never changes so draw once */}
                 <path d={makePath(solow.prodFn, SOLOW_KMAX)} fill="none" stroke="#fbbf24" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.72)} y={sy(solow.prodFn(SOLOW_KMAX*0.82))-9} fill="#fbbf24" fontSize="13" fontWeight="700">y = kᵅ</text>
+                <text x={sx(SOLOW_KMAX*0.95)} y={sy(solow.prodFn(SOLOW_KMAX*0.95))-9} fill="#fbbf24" fontSize="12" fontWeight="700">y=kᵅ</text>
+                {/* New investment and break-even */}
                 <path d={makePath(solow.investFn, SOLOW_KMAX)} fill="none" stroke="#818cf8" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.70)} y={sy(solow.investFn(SOLOW_KMAX*0.75))-9} fill="#818cf8" fontSize="13" fontWeight="700">s·f(k)</text>
+                <text x={sx(SOLOW_KMAX*0.95)} y={sy(solow.investFn(SOLOW_KMAX*0.95))-9} fill="#818cf8" fontSize="12" fontWeight="700">{hasGhost ? "s₂·f(k)" : "s·f(k)"}</text>
                 <path d={makePath(solow.breakEven, SOLOW_KMAX)} fill="none" stroke="#f87171" strokeWidth="2.5" />
-                <text x={sx(SOLOW_KMAX*0.72)} y={sy(solow.breakEven(SOLOW_KMAX*0.78))+16} fill="#f87171" fontSize="13" fontWeight="700">(δ+n+g)k</text>
+                <text x={sx(SOLOW_KMAX*0.92)} y={sy(solow.breakEven(SOLOW_KMAX*0.92))-9} fill="#f87171" fontSize="12" fontWeight="700">{hasGhost ? "(δ+n+g)₂k" : "(δ+n+g)k"}</text>
                 <line x1={sx(solow.kStar)} y1={mg.top} x2={sx(solow.kStar)} y2={H-mg.bottom} stroke="#34d399" strokeWidth="2" strokeDasharray="8 6" />
-                <text x={sx(solow.kStar)+5} y={mg.top+16} fill="#34d399" fontSize="12">k*</text>
+                <text x={sx(solow.kStar)+5} y={mg.top+16} fill="#34d399" fontSize="12">{hasGhost ? "k₂*" : "k*"}</text>
                 {capitalShock !== 0 && <>
                   <line x1={sx(solow.kCurrent)} y1={mg.top} x2={sx(solow.kCurrent)} y2={H-mg.bottom} stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="4 4" opacity="0.8" />
                   <text x={sx(solow.kCurrent)+5} y={mg.top+32} fill="#f59e0b" fontSize="11">k</text>
@@ -532,8 +587,8 @@ export default function App() {
               <ArrowOverlay />
 
               {/* ── Equilibrium dot ── */}
-              <circle cx={cx} cy={cy} r="7" fill="#f1f5f9" />
-              <text x={cx+10} y={cy-10} fontSize="13" fill="#f1f5f9" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
+              <circle cx={cx} cy={cy} r="11" fill="#fbbf24" /><circle cx={cx} cy={cy} r="7" fill="#000" />
+              <text x={cx+13} y={cy-12} fontSize="14" fill="#fbbf24" fontWeight="700">{hasGhost ? "E₂" : "E"}</text>
               {!hasGhost && <>
                 <text x={cx} y={xBot+18} fontSize="12" fill="#a1a1aa" textAnchor="middle">{curEq.x.toFixed(model === "Solow" ? 1 : 0)}</text>
                 <text x={mg.left-8} y={cy+4} fontSize="12" fill="#a1a1aa" textAnchor="end">{curEq.y.toFixed(model === "Solow" ? 2 : 1)}</text>
@@ -545,6 +600,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
