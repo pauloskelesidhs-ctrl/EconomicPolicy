@@ -6,13 +6,14 @@ I am recently working on a project that depicts three basic macroeconomic models
 ➡️The project is still in active development — new features and improvements are being added regularly.
 Deployed on GitHub Pages with JavaScript.
 
-It helps students and teachers explore:
+➡️It helps students and teachers explore:
 - fiscal policy
 - monetary policy
 - demand shocks
 - supply shocks
 - stagflation
 - equilibrium changes across macroeconomic models
+
 🔗 Try it here: https://lnkd.in/dDxJCqu5
 #Macroeconomics #Economics
 ## Live Demo
