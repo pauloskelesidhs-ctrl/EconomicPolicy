@@ -2,6 +2,7 @@
 I am recently working on a project that depicts three basic macroeconomic models of Economic Policy ( AD-AS , IS-LM , IS-MP) and the Solow Growth Model. The basic idea was born from my study on Greece’s long-run economic growth through the Solow model — particularly the path of recovery since the 2009 financial crisis. 
 
 
+
 ➡️The project is still in active development — new features and improvements are being added regularly.
 Deployed on GitHub Pages with JavaScript.
 
@@ -22,7 +23,6 @@ It helps students and teachers explore:
 Add your demo link here:
 
 `https://pauloskelesidhs-ctrl.github.io/EconomicPolicy/`
-
 ## Features
 
 - **AD-AS exercise diagram**
