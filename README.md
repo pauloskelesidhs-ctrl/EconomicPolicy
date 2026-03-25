@@ -7,7 +7,7 @@ Deployed on GitHub Pages with JavaScript.
 
 🔗 Try it here: https://lnkd.in/dDxJCqu5
 #Macroeconomics #Economics
-EconomicPolicy is an interactive macroeconomics visualizer for **AD-AS**, **IS-LM**, and **IS-MP** diagrams.
+
 
 It helps students and teachers explore:
 - fiscal policy
