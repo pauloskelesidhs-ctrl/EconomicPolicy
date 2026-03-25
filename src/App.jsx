@@ -3,17 +3,28 @@ import React, { useMemo, useState, useRef } from "react";
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function SliderField({ label, value, min, max, step = 1, dec = 0, onChange, onDown, onUp }) {
+  const [draft, setDraft] = React.useState(null);
+  const displayVal = draft !== null ? draft : (dec > 0 ? parseFloat(value).toFixed(dec) : Math.round(value));
+
+  const commit = (raw) => {
+    setDraft(null);
+    const v = parseFloat(raw);
+    if (!isNaN(v)) onChange(clamp(v, min, max));
+  };
+
   return (
     <label className="field">
       <span>{label}</span>
       <div className="slider-row">
         <input type="range" min={min} max={max} step={step} value={value}
           onPointerDown={onDown} onPointerUp={onUp}
-          onChange={(e) => onChange(+e.target.value)} />
+          onChange={(e) => { setDraft(null); onChange(+e.target.value); }} />
         <input type="number" min={min} max={max} step={step}
-          value={dec > 0 ? parseFloat(value).toFixed(dec) : Math.round(value)}
+          value={displayVal}
           onPointerDown={onDown}
-          onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(clamp(v, min, max)); }} />
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") commit(e.target.value); }} />
       </div>
     </label>
   );
@@ -542,6 +553,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
