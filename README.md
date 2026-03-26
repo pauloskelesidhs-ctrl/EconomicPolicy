@@ -11,6 +11,7 @@ I am recently working on a project that depicts four basic macroeconomic models 
 
 ➡️The project is still in active development — new features and improvements are being added regularly.
 Deployed on GitHub Pages with JavaScript.
+ 
  https://lnkd.in/dDxJCqu5
 #Macroeconomics #Economics
 ## Live Demo
